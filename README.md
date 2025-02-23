@@ -44,8 +44,6 @@ La estructura del repositorio es la siguiente:
 │   └── tfg_db.sql
 ├── db.py
 ├── main.py
-├── __pycache__
-│   └── db.cpython-312.pyc
 ├── pyproject.toml
 ├── README.md
 └── uv.lock
