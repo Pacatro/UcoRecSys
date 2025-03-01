@@ -55,3 +55,12 @@ La estructura del repositorio es la siguiente:
 - `database/`: Incluye la base de datos SQLite y el script SQL para su creación.
 - `db.py`: Funciones para cargar y crear la base de datos a partir de los archivos CSV.
 - `main.py`: Lógica principal del proyecto, encargada de cargar la base de datos y gestionar la generación de recomendaciones.
+
+## Autor  
+
+**Francisco de Paula Algar Muñoz**  
+
+## Tutores  
+
+- **Amelia Zafra Gómez**  
+- **Cristóbal Romero Morales**
