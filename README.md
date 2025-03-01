@@ -21,7 +21,7 @@ Sigue estos pasos para ejecutar el proyecto:
 
 2. **Ejecuta el proyecto**
 
-    El siguiente comando creará el entorno virtual e instalará todas las dependencias necesarias:
+    El siguiente comando ejecutará el proyecto creando el entorno virtual e instalando todas las dependencias necesarias:
 
     ```bash
     uv run main.py
