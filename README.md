@@ -1,4 +1,4 @@
-# EduRecSys
+# UcoRecSys
 
 Este repositorio forma parte de mi Trabajo de Fin de Grado (TFG) en la Universidad de Córdoba (UCO):  
 ***Aplicación de sistemas de recomendación en entornos educativos.***
@@ -15,8 +15,8 @@ Sigue estos pasos para ejecutar el proyecto:
 1. **Clona el repositorio**
 
     ```bash
-    git clone https://github.com/Pacatro/EduRecSys.git
-    cd EduRecSys
+    git clone https://github.com/Pacatro/UcoRecSys.git
+    cd UcoRecSys
     ```
 
 2. **Ejecuta el proyecto**

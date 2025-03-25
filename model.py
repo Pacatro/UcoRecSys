@@ -1,6 +1,7 @@
 import torch
 from torch import nn, optim
 from torch.utils.data import DataLoader, TensorDataset
+from sklearn.metrics import root_mean_squared_error
 
 
 class CourseRec(nn.Module):
@@ -9,15 +10,29 @@ class CourseRec(nn.Module):
     The model takes as input the number of users courses and returns the rating.
     """
 
-    def __init__(self, num_users: int, num_items: int, embedding_size: int):
+    def __init__(
+        self,
+        num_users: int,
+        num_items: int,
+        embedding_size: int = 256,
+        hidden_dim: int = 256,
+        dropout_rate: float = 0.2,
+    ):
         super(CourseRec, self).__init__()
         self.user_embedding = nn.Embedding(num_users, embedding_size)
         self.item_embedding = nn.Embedding(num_items, embedding_size)
+        self.fc1 = nn.Linear(2 * embedding_size, hidden_dim)
+        self.fc2 = nn.Linear(hidden_dim, 1)
+        self.dropout = nn.Dropout(p=dropout_rate)
+        self.relu = nn.ReLU()
 
     def forward(self, user_ids, item_ids):
         user_vec = self.user_embedding(user_ids)
         item_vec = self.item_embedding(item_ids)
-        rating = (user_vec * item_vec).sum(dim=1)
+        combined_vec = torch.cat((user_vec, item_vec), dim=1)
+        x = self.relu(self.fc1(combined_vec))
+        x = self.dropout(x)
+        rating = self.fc2(x)
         return rating
 
 
@@ -42,15 +57,17 @@ def train_model(
     criterion = nn.MSELoss()
     optimizer = optim.Adam(model.parameters())
     dataset = TensorDataset(users, courses, ratings)
-    dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
+    dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True, num_workers=8)
 
     print("Starting training...")
 
+    model.train()
     for epoch in range(epochs):
         epoch_loss = 0
         for batch_user, batch_course, batch_rating in dataloader:
             optimizer.zero_grad()
             outputs = model(batch_user, batch_course)
+            outputs = outputs.squeeze()
             loss = torch.sqrt(criterion(outputs, batch_rating))
             loss.backward()
             optimizer.step()
@@ -58,8 +75,9 @@ def train_model(
 
         avg_loss = epoch_loss / len(dataloader)
 
-        if epoch % 10 == 0:
-            print(f"Epoch {epoch + 1}/{epochs}, loss: {avg_loss:.4f}")
+        # if epoch % 10 == 0:
+        #     print(f"Epoch {epoch + 1}/{epochs}, loss: {avg_loss:.4f}")
+        print(f"Epoch {epoch + 1}/{epochs}, loss: {avg_loss:.4f}")
 
 
 def evaluate_model(
@@ -76,7 +94,6 @@ def evaluate_model(
     """
     model.eval()
     with torch.no_grad():
-        criterion = nn.MSELoss()
         y_pred = model(users, courses)
-        loss = criterion(y_pred, ratings)
+        loss = root_mean_squared_error(y_pred, ratings)
     return loss

@@ -1,13 +1,13 @@
 [project]
-name = "EduRecSys"
+name = "UcoRecSys"
 version = "0.1.0"
 description = "El objetivo de este TFG es desarrollar un sistema de recomendación para e-learning basado en un conjunto de datos de referencia, lo que permitirá evaluar su rendimiento en comparación con otros modelos previos."
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
-    "pandas>=2.2.3",
-    "surprise>=0.1",
-    "numpy<2",
-    "scikit-learn>=1.6.1",
-    "torch>=2.6.0",
+  "pandas>=2.2.3",
+  "surprise>=0.1",
+  "numpy<2",
+  "scikit-learn>=1.6.1",
+  "torch>=2.6.0",
 ]
