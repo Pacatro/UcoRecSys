@@ -10,4 +10,5 @@ dependencies = [
   "numpy<2",
   "scikit-learn>=1.6.1",
   "torch>=2.6.0",
+  "evidently>=0.6.7",
 ]
