@@ -27,35 +27,6 @@ Sigue estos pasos para ejecutar el proyecto:
     uv run main.py
     ```
 
-## Estructura del proyecto
-
-> [!WARNING]
-> La estructura de directorios y archivos puede variar con el paso del tiempo.
-
-La estructura del repositorio es la siguiente:
-
-```terminal
-├── data
-│   ├── explicit_ratings_en.csv
-│   ├── explicit_ratings_fr.csv
-│   ├── ...
-├── database
-│   ├── tfg_db.db
-│   └── tfg_db.sql
-├── db.py
-├── main.py
-├── pyproject.toml
-├── README.md
-└── uv.lock
-```
-
-### Descripción de directorios y archivos principales
-
-- `data/`: Contiene los datasets en formato CSV utilizados para entrenar y validar el modelo.
-- `database/`: Incluye la base de datos SQLite y el script SQL para su creación.
-- `db.py`: Funciones para cargar y crear la base de datos a partir de los archivos CSV.
-- `main.py`: Lógica principal del proyecto, encargada de cargar la base de datos y gestionar la generación de recomendaciones.
-
 ## Autor  
 
 **Francisco de Paula Algar Muñoz**  
