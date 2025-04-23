@@ -98,9 +98,6 @@ def main():
 
     print(f"\nRMSE en validación: {rmse:.4f}")
 
-    with open("results.txt", "a") as f:
-        f.write(f"{rmse}\n")
-
 
 if __name__ == "__main__":
     main()

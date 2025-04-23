@@ -1,6 +1,6 @@
 import torch
 
-EPOCHS = 1
+EPOCHS = 15
 PATIENCE = 3  # Número de épocas para esperar mejora antes de detener el entrenamiento
 DELTA = 0.0001  # Mejora mínima requerida para considerar progreso
 
