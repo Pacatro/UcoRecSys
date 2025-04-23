@@ -1,121 +1,105 @@
-import sys
+import torch
+from torch import nn
 import pandas as pd
-import numpy as np
-from pathlib import Path
-from collections import defaultdict
-from surprise import Reader, Dataset, SVDpp, accuracy
-from surprise.model_selection import train_test_split
-from evidently.metric_preset import RecsysPreset
-from evidently.report import Report
-from sklearn.impute import SimpleImputer
-from sklearn.preprocessing import MinMaxScaler
+from sklearn import preprocessing
+from sklearn import model_selection
+from sklearn.metrics import root_mean_squared_error
 
-import db
+from model import CourseRecommender, train
+from course_dataset import CourseDataset
+from config import DEVICE
 
 
-def get_top_k_preds(predictions, k=10):
-    """
-    Transforma una lista de objetos Prediction de Surprise en un DataFrame
-    con el formato requerido por Evidently para métricas de sistemas de recomendación.
+# TODO: Hacer validación cruzada
+def eval_model(model: nn.Module, valid_dataset: CourseDataset) -> float:
+    model.eval()
 
-    Cada fila contendrá:
-      - user_id: identificador del usuario
-      - item_id: identificador del ítem recomendado
-      - prediction: puntuación estimada por el modelo
-      - rank: posición en la lista de recomendaciones (1 = mejor)
-      - target: 1 si el rating real (r_ui) es mayor o igual a 7, 0 en caso contrario
+    with torch.no_grad():
+        users = torch.tensor(valid_dataset.users, dtype=torch.long, device=DEVICE)
+        courses = torch.tensor(valid_dataset.courses, dtype=torch.long, device=DEVICE)
+        watch_percentage = torch.tensor(
+            valid_dataset.watch_percentage, dtype=torch.float, device=DEVICE
+        )
+        ratings = torch.tensor(valid_dataset.ratings, dtype=torch.float, device=DEVICE)
 
-    :param predictions: Lista de objetos Prediction de Surprise.
-    :param k: Top K de recomendaciones. Por defecto 10.
-    """
-    top_n = defaultdict(list)
-    for pred in predictions:
-        top_n[pred.uid].append(pred)
+        outputs = model(users, courses, watch_percentage)
+        preds = outputs.squeeze().cpu().numpy()
+        targets = ratings.cpu().numpy()
 
-    rows = []
-    for _, preds in top_n.items():
-        # Ordena las predicciones para cada usuario de mayor a menor score
-        preds.sort(key=lambda x: x.est, reverse=True)
-        for rank, pred in enumerate(preds[:k], start=1):
-            rows.append(
-                {
-                    "user_id": pred.uid,
-                    "item_id": pred.iid,
-                    "prediction": pred.est,
-                    "rank": rank,
-                    "target": int(
-                        pred.r_ui >= 7
-                    ),  # Ajusta este umbral según tu criterio
-                }
-            )
-    return pd.DataFrame(rows)
+        rmse = root_mean_squared_error(preds, targets)
+
+    return rmse
 
 
-def generate_report(preds: pd.DataFrame, k: int = 10, report_path: str = "report.html"):
-    """
-    Genera un reporte de evidently con los resultados del sistema de recomendación.
+def balance_dataset(df: pd.DataFrame) -> pd.DataFrame:
+    df_eq_10 = df[df["rating"] == 10]
+    df_not_eq_10 = df[df["rating"] != 10]
 
-    :param preds: Las predicciones del sistema.
-    :param k: Top K de recomendaciones.
-    :param report_path: El path donde guardar el reporte.
-    """
-    pred_df = get_top_k_preds(preds, k=k)
+    min_count = min(len(df_eq_10), len(df_not_eq_10))
 
-    metrics = RecsysPreset(k=10)
-    report = Report(metrics=[metrics])
-    report.run(reference_data=None, current_data=pred_df)
+    df_eq_10_sampled = df_eq_10.sample(n=min_count, random_state=42)
+    df_not_eq_10_sampled = df_not_eq_10.sample(n=min_count, random_state=42)
 
-    report.save_html(filename=report_path)
-
-
-def preprocess_ratings(df: pd.DataFrame) -> pd.DataFrame:
-    """
-    Aplica preprocesamiento únicamente a la columna 'rating',
-    dejando intactos los identificadores.
-    """
-    imp = SimpleImputer(missing_values=np.nan, strategy="median")
-    df.loc[:, "rating"] = imp.fit_transform(df[["rating"]])
-
-    # Escalar ratings al rango 1-10
-    scaler = MinMaxScaler(feature_range=(1, 10))
-    df.loc[:, "rating"] = scaler.fit_transform(df[["rating"]])
+    df = pd.concat([df_eq_10_sampled, df_not_eq_10_sampled])
 
     return df
 
 
-def main():
-    preprocess = len(sys.argv) > 1 and sys.argv[1]
-
-    if not Path(db.DB_FILE_PATH).exists():
-        db.csv_to_sql(verbose=True)
-
-    df_explicit_ratings_en = pd.read_csv("data/explicit_ratings_en.csv")
-    df_explicit_ratings_fr = pd.read_csv("data/explicit_ratings_fr.csv")
+def load_data(balance: bool = True) -> tuple[pd.DataFrame, pd.DataFrame, int, int]:
+    df_explicit_ratings_en = pd.read_csv("./data/explicit_ratings_en.csv")
+    df_explicit_ratings_fr = pd.read_csv("./data/explicit_ratings_fr.csv")
     df_explicit_ratings = pd.concat([df_explicit_ratings_en, df_explicit_ratings_fr])
 
     # Seleccionar únicamente las columnas relevantes
-    final_df = df_explicit_ratings[["user_id", "item_id", "rating"]]
+    df = df_explicit_ratings[["user_id", "item_id", "watch_percentage", "rating"]]
 
-    if preprocess:
-        print("Preprocesando...")
-        final_df = preprocess_ratings(final_df)
+    le_user = preprocessing.LabelEncoder()
+    le_course = preprocessing.LabelEncoder()
 
-    reader = Reader(rating_scale=(1, 10))
-    data = Dataset.load_from_df(final_df, reader)
+    df.loc[:, "user_id"] = le_user.fit_transform(df.user_id.values)
+    df.loc[:, "item_id"] = le_course.fit_transform(df.item_id.values)
 
-    trainset, testset = train_test_split(data, test_size=0.25, random_state=42)
+    num_users = len(le_user.classes_)
+    num_courses = len(le_course.classes_)
 
-    algo = SVDpp()
-    algo.fit(trainset)
+    if balance:
+        df = balance_dataset(df)
 
-    predictions = algo.test(testset)
+    df_train, df_val = model_selection.train_test_split(
+        df, test_size=0.2, random_state=3, stratify=df.rating.values
+    )
 
-    accuracy.mse(predictions)
-    accuracy.rmse(predictions)
-    accuracy.mae(predictions)
-    accuracy.fcp(predictions)
+    return df_train, df_val, num_users, num_courses
 
-    generate_report(predictions, k=10)
+
+def main():
+    print(f"Using {DEVICE} device")
+
+    df_train, df_val, num_users, num_courses = load_data()
+
+    train_dataset = CourseDataset(df_train)
+    valid_dataset = CourseDataset(df_val)
+
+    model = CourseRecommender(
+        num_users=num_users,
+        num_courses=num_courses,
+        embedding_size=128,
+        hidden_dim=256,
+        dropout=0.1,
+    ).to(DEVICE)
+
+    optimizer = torch.optim.Adam(model.parameters())
+    loss_func = nn.MSELoss()
+
+    print("Training...")
+    train(model, optimizer, loss_func, train_dataset, valid_dataset)
+
+    rmse = eval_model(model, valid_dataset)
+
+    print(f"\nRMSE en validación: {rmse:.4f}")
+
+    with open("results.txt", "a") as f:
+        f.write(f"{rmse}\n")
 
 
 if __name__ == "__main__":
