@@ -38,16 +38,16 @@ def get_top_k_preds(predictions, k=10):
     for _, preds in top_n.items():
         # Ordena las predicciones para cada usuario de mayor a menor score
         preds.sort(key=lambda x: x.est, reverse=True)
-        for rank, pred in enumerate(preds[:k], start=1):
+        for rank, pred in enumerate(preds, start=1):
             rows.append(
                 {
                     "user_id": pred.uid,
                     "item_id": pred.iid,
                     "prediction": pred.est,
+                    "rating": pred.r_ui,
                     "rank": rank,
-                    "target": int(
-                        pred.r_ui >= 7
-                    ),  # Ajusta este umbral según tu criterio
+                    "pred_target": int(pred.est >= 8),
+                    "target": int(pred.r_ui >= 8),
                 }
             )
     return pd.DataFrame(rows)
@@ -122,7 +122,12 @@ def main():
     accuracy.mae(predictions)
     accuracy.fcp(predictions)
 
-    generate_report(predictions, k=10)
+    recs = get_top_k_preds(predictions, k=10)
+    ax = recs.plot(kind="scatter", x="rating", y="prediction", s=32, alpha=0.8)
+    fig = ax.get_figure()
+    fig.savefig("ratings_vs_predictions_svd.png", dpi=300, bbox_inches="tight")
+
+    # generate_report(predictions, k=10)
 
 
 if __name__ == "__main__":
