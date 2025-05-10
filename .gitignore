@@ -12,3 +12,6 @@ wheels/
 # Metrics report (for now)
 report.html
 report.json
+
+# Model checkpoints
+lightning_logs/

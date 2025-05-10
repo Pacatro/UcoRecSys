@@ -1,8 +1,18 @@
-import torch
-
-EPOCHS = 15
-PATIENCE = 3  # Número de épocas para esperar mejora antes de detener el entrenamiento
-DELTA = 0.0001  # Mejora mínima requerida para considerar progreso
-
-BATCH_SIZE = 32
-DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
+BALANCE = False
+BINARIZE = False
+FAST_DEV_RUN = False
+BATCH_SIZE = 128 if not BALANCE else 512
+EPOCHS = 100
+PATIENCE = 5
+DELTA = 0.0001
+K = 10
+THRESHOLD = 8
+TARGET = "rating"
+FEATURES = [
+    "user_id",
+    "item_id",
+    "item_type",
+    "difficulty",
+    "nb_views",
+    "watch_percentage",
+]

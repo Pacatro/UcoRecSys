@@ -1,34 +1,24 @@
-import torch
-from torch import nn
 import pandas as pd
-from sklearn import preprocessing
-from sklearn import model_selection
-from sklearn.metrics import root_mean_squared_error
+import lightning as L
+from lightning.pytorch.callbacks import EarlyStopping, ModelCheckpoint
+from pathlib import Path
 
-from model import CourseRecommender, train
-from course_dataset import CourseDataset
-from config import DEVICE
-
-
-# TODO: Hacer validación cruzada
-def eval_model(model: nn.Module, valid_dataset: CourseDataset) -> float:
-    model.eval()
-
-    with torch.no_grad():
-        users = torch.tensor(valid_dataset.users, dtype=torch.long, device=DEVICE)
-        courses = torch.tensor(valid_dataset.courses, dtype=torch.long, device=DEVICE)
-        watch_percentage = torch.tensor(
-            valid_dataset.watch_percentage, dtype=torch.float, device=DEVICE
-        )
-        ratings = torch.tensor(valid_dataset.ratings, dtype=torch.float, device=DEVICE)
-
-        outputs = model(users, courses, watch_percentage)
-        preds = outputs.squeeze().cpu().numpy()
-        targets = ratings.cpu().numpy()
-
-        rmse = root_mean_squared_error(preds, targets)
-
-    return rmse
+import db
+from model import HybridRecommender, HybridModel
+from dataset import ELearningDataModule
+from config import (
+    EPOCHS,
+    BATCH_SIZE,
+    DELTA,
+    PATIENCE,
+    FAST_DEV_RUN,
+    BINARIZE,
+    BALANCE,
+    K,
+    THRESHOLD,
+    FEATURES,
+    TARGET,
+)
 
 
 def balance_dataset(df: pd.DataFrame) -> pd.DataFrame:
@@ -45,58 +35,134 @@ def balance_dataset(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
-def load_data(balance: bool = True) -> tuple[pd.DataFrame, pd.DataFrame, int, int]:
-    df_explicit_ratings_en = pd.read_csv("./data/explicit_ratings_en.csv")
-    df_explicit_ratings_fr = pd.read_csv("./data/explicit_ratings_fr.csv")
-    df_explicit_ratings = pd.concat([df_explicit_ratings_en, df_explicit_ratings_fr])
+def load_data(features: list[str], target: str) -> pd.DataFrame:
+    explicit_df_en = pd.read_csv("./data/explicit_ratings_en.csv")
+    explicit_df_fr = pd.read_csv("./data/explicit_ratings_fr.csv")
 
-    # Seleccionar únicamente las columnas relevantes
-    df = df_explicit_ratings[["user_id", "item_id", "watch_percentage", "rating"]]
+    items_en = pd.read_csv("./data/items_en.csv")
+    items_fr = pd.read_csv("./data/items_fr.csv")
 
-    le_user = preprocessing.LabelEncoder()
-    le_course = preprocessing.LabelEncoder()
+    df_explicit = pd.concat([explicit_df_en, explicit_df_fr], ignore_index=True)
+    df_items = pd.concat([items_en, items_fr], ignore_index=True)
 
-    df.loc[:, "user_id"] = le_user.fit_transform(df.user_id.values)
-    df.loc[:, "item_id"] = le_course.fit_transform(df.item_id.values)
+    df_explicit["created_at"] = pd.to_datetime(df_explicit["created_at"])
+    df_items = df_items.drop(columns=["created_at"])
 
-    num_users = len(le_user.classes_)
-    num_courses = len(le_course.classes_)
+    df = pd.merge(df_explicit, df_items, on="item_id", how="inner")
 
-    if balance:
-        df = balance_dataset(df)
+    df["Difficulty"] = df["Difficulty"].fillna("Undefined").astype("category")
+    df["type"] = df["type"].fillna("Undefined").astype("category")
+    df["user_id"] = df["user_id"].astype("category")
+    df["item_id"] = df["item_id"].astype("category")
 
-    df_train, df_val = model_selection.train_test_split(
-        df, test_size=0.2, random_state=3, stratify=df.rating.values
+    df.rename(
+        columns={"Difficulty": "difficulty", "type": "item_type"},
+        inplace=True,
     )
 
-    return df_train, df_val, num_users, num_courses
+    df.sort_values(by="created_at", inplace=True, ascending=False)
+
+    return df[features + [target]]
+
+
+def get_test_predictions(
+    trainer: L.Trainer,
+    model: HybridRecommender,
+    dm: L.LightningDataModule,
+    threshold: float,
+) -> pd.DataFrame:
+    raw_outputs = trainer.predict(model, datamodule=dm)
+
+    flat = []
+    for batch_out in raw_outputs:
+        B = batch_out["user_id"].size(0)
+        for i in range(B):
+            flat.append(
+                {
+                    "user_id": int(batch_out["user_id"][i].item()),
+                    "item_id": int(batch_out["item_id"][i].item()),
+                    "prediction": float(batch_out["prediction"][i].item()),
+                    "rating": float(batch_out["rating"][i].item()),
+                }
+            )
+
+    df = pd.DataFrame(flat)
+
+    # 3) Definimos la columna target binaria
+    df["target"] = (df["rating"] >= threshold).astype(int)
+    df["pred_target"] = (df["prediction"] >= threshold).astype(int)
+
+    return df
 
 
 def main():
-    print(f"Using {DEVICE} device")
+    if not Path(db.DB_FILE_PATH).exists():
+        db.csv_to_sql(verbose=True)
 
-    df_train, df_val, num_users, num_courses = load_data()
+    print(f"Using batch size of {BATCH_SIZE}")
+    print(f"Using {len(FEATURES)} features: {FEATURES}")
+    print(f"k = {K}")
+    print(f"Patience = {PATIENCE}, delta = {DELTA}")
+    print(f"Threshold = {THRESHOLD}")
+    print(f"Epochs = {EPOCHS}")
+    print(f"Balance: {BALANCE}")
+    print(f"Binarize: {BINARIZE}\n")
 
-    train_dataset = CourseDataset(df_train)
-    valid_dataset = CourseDataset(df_val)
+    df = load_data(features=FEATURES, target=TARGET)
 
-    model = CourseRecommender(
-        num_users=num_users,
-        num_courses=num_courses,
-        embedding_size=128,
-        hidden_dim=256,
-        dropout=0.1,
-    ).to(DEVICE)
+    dm = ELearningDataModule(df, target=TARGET, batch_size=BATCH_SIZE)
+    dm.setup()
 
-    optimizer = torch.optim.Adam(model.parameters())
-    loss_func = nn.MSELoss()
+    model_core = HybridModel(
+        n_users=dm.num_users,
+        n_items=dm.num_items,
+        numeric_features=dm.numeric_features,
+        cat_cardinalities=dm.cat_cardinalities,
+    )
 
-    print("Training...")
-    train(model, optimizer, loss_func, train_dataset, valid_dataset)
+    model = HybridRecommender(
+        model=model_core,
+        k=K,
+        threshold=THRESHOLD,
+    )
 
-    rmse = eval_model(model, valid_dataset)
+    early_stop = EarlyStopping(
+        monitor="val_loss",
+        patience=PATIENCE,
+        mode="min",
+        min_delta=DELTA,
+        verbose=True,
+    )
 
-    print(f"\nRMSE en validación: {rmse:.4f}")
+    checkpoint = ModelCheckpoint(
+        monitor="val_loss", mode="min", save_top_k=1, filename="best-model"
+    )
+
+    trainer = L.Trainer(
+        max_epochs=EPOCHS,
+        accelerator="auto",
+        devices="auto",
+        callbacks=[early_stop, checkpoint],
+        log_every_n_steps=10,
+        fast_dev_run=FAST_DEV_RUN,
+    )
+
+    trainer.fit(model, datamodule=dm)
+
+    if not FAST_DEV_RUN:
+        model = HybridRecommender.load_from_checkpoint(
+            trainer.checkpoint_callback.best_model_path,
+            model=model_core,
+            k=K,
+            threshold=THRESHOLD,
+        )
+
+    trainer.test(model=model, datamodule=dm)
+    df = get_test_predictions(trainer, model, dm, THRESHOLD)
+    print("\n", df.head(10))
+    ax = df.plot(kind="scatter", x="rating", y="prediction", s=32, alpha=0.8)
+    fig = ax.get_figure()
+    fig.savefig("ratings_vs_predictions.png", dpi=300, bbox_inches="tight")
 
 
 if __name__ == "__main__":

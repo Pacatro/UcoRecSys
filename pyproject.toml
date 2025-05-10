@@ -10,6 +10,7 @@ dependencies = [
   "numpy<2",
   "scikit-learn>=1.6.1",
   "torch>=2.6.0",
-  "evidently>=0.6.7",
   "matplotlib>=3.10.1",
+  "torchmetrics>=1.7.1",
+  "lightning>=2.5.1.post0",
 ]

@@ -1,176 +1,200 @@
-import sys
 import torch
 from torch import nn
-from torch.utils.data import DataLoader
+import lightning.pytorch as L
+from torchmetrics import MetricCollection
+from torchmetrics.retrieval import (
+    RetrievalPrecision,
+    RetrievalRecall,
+    RetrievalNormalizedDCG,
+    RetrievalHitRate,
+    RetrievalMAP,
+    RetrievalMRR,
+)
 
-from config import EPOCHS, BATCH_SIZE, DEVICE, DELTA, PATIENCE
-from course_dataset import CourseDataset
 
-
-class CourseRecommender(nn.Module):
+class HybridModel(nn.Module):
     def __init__(
         self,
-        num_users,
-        num_courses,
-        embedding_size=128,
-        hidden_dim=256,
-        dropout=0.1,
+        n_users: int,
+        n_items: int,
+        cat_cardinalities: dict[str, int],
+        numeric_features: list[str],
+        emb_dim: int = 32,
+        hidden_dims: list[int] = [64, 32, 16],
+        dropout: float = 0.5,
+        global_mean: float = 7.0,
+        min_rating: float = 1.0,
+        max_rating: float = 10.0,
     ):
-        super(CourseRecommender, self).__init__()
+        super().__init__()
 
-        self.user_embedding = nn.Embedding(
-            num_embeddings=num_users, embedding_dim=embedding_size
-        )
-        self.course_embedding = nn.Embedding(
-            num_embeddings=num_courses, embedding_dim=embedding_size
-        )
+        # CF embeddings
+        self.user_embedding = nn.Embedding(n_users, emb_dim)
+        self.item_embedding = nn.Embedding(n_items, emb_dim)
 
-        input_dim = 2 * embedding_size + 1
-
-        self.model = nn.Sequential(
-            nn.Linear(input_dim, hidden_dim),
-            nn.BatchNorm1d(hidden_dim),
-            nn.ReLU(),
-            nn.Dropout(dropout),
-            nn.Linear(hidden_dim, hidden_dim // 2),
-            nn.BatchNorm1d(hidden_dim // 2),
-            nn.ReLU(),
-            nn.Dropout(dropout),
-            nn.Linear(hidden_dim // 2, 1),
+        # Content Categories embeddings (CB)
+        self.cat_embeddings = nn.ModuleDict(
+            {
+                key: nn.Embedding(card, emb_dim // 2)
+                for key, card in cat_cardinalities.items()
+            }
         )
 
-    def forward(self, users, courses, watch_percentage):
-        user_embedded = self.user_embedding(users)
-        course_embedded = self.course_embedding(courses)
-        watch_percentage = watch_percentage.unsqueeze(1)
+        # MLP
+        n_cat = len(self.cat_embeddings)
+        n_num = len(numeric_features)
+        mlp_input = 2 * emb_dim + n_cat * (emb_dim // 2) + n_num
+        layers = []
+        for h in hidden_dims:
+            layers += [
+                nn.Linear(mlp_input, h),
+                nn.BatchNorm1d(h),
+                nn.ReLU(inplace=True),
+                nn.Dropout(dropout),
+            ]
+            mlp_input = h
 
-        x = torch.cat([user_embedded, course_embedded, watch_percentage], dim=1)
-        output = self.model(x)
+        layers.append(nn.Linear(mlp_input, hidden_dims[-1]))
+        self.mlp = nn.Sequential(*layers)
 
-        return output
+        # GMF + MLP
+        self.user_bias = nn.Embedding(n_users, 1)
+        self.item_bias = nn.Embedding(n_items, 1)
+        self.combine = nn.Linear(emb_dim + hidden_dims[-1], 1)
+
+        # Hyperparameters
+        self.numeric_features = numeric_features
+        self.global_mean = global_mean
+        self.min_rating = min_rating
+        self.max_rating = max_rating
+
+    def forward(self, batch: dict[str, torch.Tensor]) -> torch.Tensor:
+        u = batch["user_id"].long()
+        i = batch["item_id"].long()
+        u_emb = self.user_embedding(u)
+        i_emb = self.item_embedding(i)
+
+        gmf = u_emb * i_emb
+
+        # cat
+        cat_vecs = [emb(batch[key].long()) for key, emb in self.cat_embeddings.items()]
+        cat_embs = (
+            torch.cat(cat_vecs, dim=1)
+            if cat_vecs
+            else torch.zeros(u.size(0), 0, device=u_emb.device)
+        )
+
+        # num
+        num_vecs = [batch[n].unsqueeze(1).float() for n in self.numeric_features]
+        num_embs = (
+            torch.cat(num_vecs, dim=1)
+            if num_vecs
+            else torch.zeros(u.size(0), 0, device=u_emb.device)
+        )
+
+        mlp_in = torch.cat([u_emb, i_emb, cat_embs, num_embs], dim=1)
+        mlp_vec = self.mlp(mlp_in)
+        combo = torch.cat([gmf, mlp_vec], dim=1)
+        score = self.combine(combo).squeeze(1)
+
+        score = (
+            score
+            + self.user_bias(u).squeeze(1)
+            + self.item_bias(i).squeeze(1)
+            + self.global_mean
+        )
+
+        return score.clamp(min=self.min_rating, max=self.max_rating)
 
 
-def log_progress(
-    epoch: int,
-    step: int,
-    total_loss: float,
-    log_progress_step: int,
-    data_size: int,
-    losses: list,
-):
-    avg_loss = total_loss / log_progress_step
-    sys.stderr.write(
-        f"\r{epoch + 1:02d}/{EPOCHS:02d} | Step: {step}/{data_size} | Avg Loss: {avg_loss:<6.9f}"
-    )
-    sys.stderr.flush()
-    losses.append(avg_loss)
+class HybridRecommender(L.LightningModule):
+    def __init__(
+        self,
+        model: HybridModel,
+        threshold: float = 8.0,
+        lr: float = 1e-3,
+        weight_decay: float = 1e-6,
+        k: int = 10,
+    ):
+        super().__init__()
+        self.model = model
+        self.loss_fn = nn.MSELoss()
+        self.threshold = threshold
+        self.lr = lr
+        self.weight_decay = weight_decay
+        # metrics
+        metrics = MetricCollection(
+            RetrievalPrecision(top_k=k, adaptive_k=True),
+            RetrievalRecall(top_k=k),
+            RetrievalNormalizedDCG(top_k=k),
+            RetrievalHitRate(top_k=k),
+            RetrievalMAP(top_k=k),
+            RetrievalMRR(top_k=k),
+        )
+        self.train_metrics = metrics.clone(prefix="train/")
+        self.val_metrics = metrics.clone(prefix="val/")
+        self.test_metrics = metrics.clone(prefix="test/")
 
+    def forward(self, batch):
+        score = self.model(batch)
+        return {
+            "user_id": batch["user_id"].long(),
+            "item_id": batch["item_id"].long(),
+            "prediction": score.detach(),
+            "rating": batch["rating"].float(),
+        }
 
-def train(
-    model: nn.Module,
-    optimizer: torch.optim.Optimizer,
-    loss_func: torch.nn.Module,
-    train_dataset: CourseDataset,
-    valid_dataset: CourseDataset,
-):
-    total_loss = 0
+    def step(self, batch, metrics, prefix):
+        preds = self.model(batch)
+        loss = self.loss_fn(preds, batch["rating"].float())
+        target = (batch["rating"] >= self.threshold).int()
+        metrics.update(preds, target, indexes=batch["user_id"].long())
 
-    log_progress_step = 100
-    losses = []
+        self.log(f"{prefix}_loss", loss, prog_bar=(prefix != "train"))
 
-    # Variables para early stopping
-    best_val_loss = float("inf")
-    early_stop_counter = 0
-    best_model_state = None
+        if prefix != "train":
+            self.log(f"{prefix}_rmse", torch.sqrt(loss), prog_bar=True)
 
-    train_loader = DataLoader(
-        train_dataset, batch_size=BATCH_SIZE, shuffle=False, num_workers=2
-    )
+        return loss
 
-    val_loader = DataLoader(
-        valid_dataset, batch_size=BATCH_SIZE, shuffle=False, num_workers=2
-    )
+    def training_step(self, batch):
+        return self.step(batch, self.train_metrics, "train")
 
-    model.train()
-    for e in range(EPOCHS):
-        step_count = 0  # Reiniciar contador de pasos por época
-        epoch_loss = 0
+    def on_train_epoch_end(self):
+        self.log_dict(self.train_metrics.compute())
+        self.train_metrics.reset()
 
-        # Entrenamiento
-        for i, train_data in enumerate(train_loader):
-            users = train_data["users"].to(DEVICE)
-            courses = train_data["courses"].to(DEVICE)
-            watch_percentage = train_data["watch_percentage"].to(DEVICE)
-            ratings = (
-                train_data["ratings"].to(DEVICE).squeeze()
-            )  # Asegurarse de que ratings tenga la forma correcta
+    def validation_step(self, batch):
+        self.step(batch, self.val_metrics, "val")
 
-            output = model(users, courses, watch_percentage)
-            output = output.squeeze()  # Eliminar dimensión extra
-            loss = loss_func(output, ratings)
+    def on_validation_epoch_end(self):
+        self.log_dict(self.val_metrics.compute())
+        self.val_metrics.reset()
 
-            total_loss += loss.item()
-            epoch_loss += loss.item()
-            optimizer.zero_grad()
-            loss.backward()
-            optimizer.step()
+    def test_step(self, batch):
+        self.step(batch, self.test_metrics, "test")
 
-            step_count += len(train_data["users"])
+    def on_test_epoch_end(self):
+        self.log_dict(self.test_metrics.compute())
+        self.test_metrics.reset()
 
-            # Registro de progreso
-            if (
-                step_count % log_progress_step < BATCH_SIZE
-                or i == len(train_loader) - 1
-            ):
-                log_progress(
-                    e,
-                    step_count,
-                    total_loss,
-                    log_progress_step,
-                    len(train_dataset),
-                    losses,
-                )
-                total_loss = 0
+    def predict_step(self, batch):
+        score = self.model(batch)
+        return {
+            "user_id": batch["user_id"].long(),
+            "item_id": batch["item_id"].long(),
+            "prediction": score.detach(),
+            "rating": batch["rating"].float(),
+        }
 
-        # Evaluación en conjunto de validación después de cada época
-        model.eval()
-        val_loss = 0
-        with torch.no_grad():
-            for val_data in val_loader:
-                users = val_data["users"].to(DEVICE)
-                courses = val_data["courses"].to(DEVICE)
-                watch_percentage = val_data["watch_percentage"].to(DEVICE)
-                ratings = val_data["ratings"].to(DEVICE).squeeze()
-
-                output = model(users, courses, watch_percentage)
-                output = output.squeeze()
-                loss = loss_func(output, ratings)
-                val_loss += loss.item()
-
-        avg_val_loss = val_loss / len(val_loader)
-        print(f"\nValidation Loss: {avg_val_loss:<6.9f}")
-
-        # Early stopping
-        if avg_val_loss < best_val_loss - DELTA:
-            best_val_loss = avg_val_loss
-            early_stop_counter = 0
-            # Guardar el mejor modelo
-            best_model_state = model.state_dict().copy()
-            print("Validation improved! Saving model...")
-        else:
-            early_stop_counter += 1
-            print(
-                f"Validation did not improve. Early stopping counter: {early_stop_counter}/{PATIENCE}"
-            )
-
-        if early_stop_counter >= PATIENCE:
-            print(f"\nEarly stopping triggered after {e + 1} epochs")
-            break
-
-        # Volver a modo entrenamiento para la siguiente época
-        model.train()
-
-        # Cargar el mejor modelo
-        if best_model_state is not None:
-            model.load_state_dict(best_model_state)
-            print("Loaded best model based on validation loss")
+    def configure_optimizers(self):
+        opt = torch.optim.Adam(
+            self.parameters(), lr=self.lr, weight_decay=self.weight_decay
+        )
+        sched = torch.optim.lr_scheduler.ReduceLROnPlateau(
+            opt, mode="min", factor=0.5, patience=3
+        )
+        return {
+            "optimizer": opt,
+            "lr_scheduler": {"scheduler": sched, "monitor": "val_loss"},
+        }
