@@ -74,7 +74,7 @@ class NeuralMF(nn.Module):
         x = torch.cat([u_emb, i_emb, cat_embs, num_embs], dim=1)
         score = self.mlp(x)
 
-        return score.clamp(min=self.min_rating, max=self.max_rating)
+        return score.clamp(min=self.min_rating, max=self.max_rating).squeeze(1)
 
 
 class GMFMLP(nn.Module):
