@@ -61,7 +61,6 @@ def get_test_predictions(
     threshold: float,
 ) -> pd.DataFrame:
     raw_outputs = trainer.predict(model, datamodule=dm)
-    print(f"Predictions shape: {raw_outputs}")
 
     flat = []
     for batch_out in raw_outputs:
@@ -126,13 +125,11 @@ def eval_model(models: list[nn.Module], dm: L.LightningDataModule):
 
         trainer.test(model=recsys, datamodule=dm)
         df = get_test_predictions(trainer, recsys, dm, THRESHOLD)
-        print("\n", df)
 
         image_path = (
-            sys.argv[1]
-            if len(sys.argv) > 1
-            else f"ratings_vs_predictions_{model.__class__.__name__}.png"
+            f"ratings_vs_predictions_{model.__class__.__name__}_{dm.num_features}"
         )
+        image_path = (image_path if not BALANCE else image_path + "_balanced") + ".png"
         ax = df.plot(kind="scatter", x="rating", y="prediction", s=32, alpha=0.8)
         fig = ax.get_figure()
         fig.savefig(image_path, dpi=300, bbox_inches="tight")

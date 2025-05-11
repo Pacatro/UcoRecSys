@@ -49,6 +49,7 @@ class ELearningDataModule(L.LightningDataModule):
         self.global_mean = df["rating"].mean()
         self.train_frac = train_frac
         self.val_frac = val_frac
+        self.num_features = len(df.columns)
 
         self.encoders = {}
         self.scalers = {}

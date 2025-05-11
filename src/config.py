@@ -1,6 +1,6 @@
 BALANCE = True
 BINARIZE = False
-FAST_DEV_RUN = True
+FAST_DEV_RUN = False
 BATCH_SIZE = 128
 EPOCHS = 100
 PATIENCE = 5
@@ -11,8 +11,8 @@ TARGET = "rating"
 FEATURES = [
     "user_id",
     "item_id",
-    "item_type",
-    "difficulty",
-    "nb_views",
+    # "item_type",
+    # "difficulty",
+    # "nb_views",
     "watch_percentage",
 ]
