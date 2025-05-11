@@ -4,7 +4,7 @@ from lightning.pytorch.callbacks import EarlyStopping, ModelCheckpoint
 from pathlib import Path
 
 import db
-from model import HybridRecommender, HybridModel
+from model import UcoRecSys, GMFMLP
 from dataset import ELearningDataModule
 from config import (
     EPOCHS,
@@ -67,7 +67,7 @@ def load_data(features: list[str], target: str) -> pd.DataFrame:
 
 def get_test_predictions(
     trainer: L.Trainer,
-    model: HybridRecommender,
+    model: UcoRecSys,
     dm: L.LightningDataModule,
     threshold: float,
 ) -> pd.DataFrame:
@@ -113,15 +113,15 @@ def main():
     dm = ELearningDataModule(df, target=TARGET, batch_size=BATCH_SIZE)
     dm.setup()
 
-    model_core = HybridModel(
+    model = GMFMLP(
         n_users=dm.num_users,
         n_items=dm.num_items,
         numeric_features=dm.numeric_features,
         cat_cardinalities=dm.cat_cardinalities,
     )
 
-    model = HybridRecommender(
-        model=model_core,
+    recsys = UcoRecSys(
+        model=model,
         k=K,
         threshold=THRESHOLD,
     )
@@ -147,18 +147,18 @@ def main():
         fast_dev_run=FAST_DEV_RUN,
     )
 
-    trainer.fit(model, datamodule=dm)
+    trainer.fit(recsys, datamodule=dm)
 
     if not FAST_DEV_RUN:
-        model = HybridRecommender.load_from_checkpoint(
+        recsys = UcoRecSys.load_from_checkpoint(
             trainer.checkpoint_callback.best_model_path,
-            model=model_core,
+            model=model,
             k=K,
             threshold=THRESHOLD,
         )
 
-    trainer.test(model=model, datamodule=dm)
-    df = get_test_predictions(trainer, model, dm, THRESHOLD)
+    trainer.test(model=recsys, datamodule=dm)
+    df = get_test_predictions(trainer, recsys, dm, THRESHOLD)
     print("\n", df.head(10))
     ax = df.plot(kind="scatter", x="rating", y="prediction", s=32, alpha=0.8)
     fig = ax.get_figure()

@@ -12,7 +12,7 @@ from torchmetrics.retrieval import (
 )
 
 
-class HybridModel(nn.Module):
+class GMFMLP(nn.Module):
     def __init__(
         self,
         n_users: int,
@@ -76,7 +76,6 @@ class HybridModel(nn.Module):
 
         gmf = u_emb * i_emb
 
-        # cat
         cat_vecs = [emb(batch[key].long()) for key, emb in self.cat_embeddings.items()]
         cat_embs = (
             torch.cat(cat_vecs, dim=1)
@@ -84,7 +83,6 @@ class HybridModel(nn.Module):
             else torch.zeros(u.size(0), 0, device=u_emb.device)
         )
 
-        # num
         num_vecs = [batch[n].unsqueeze(1).float() for n in self.numeric_features]
         num_embs = (
             torch.cat(num_vecs, dim=1)
@@ -107,10 +105,10 @@ class HybridModel(nn.Module):
         return score.clamp(min=self.min_rating, max=self.max_rating)
 
 
-class HybridRecommender(L.LightningModule):
+class UcoRecSys(L.LightningModule):
     def __init__(
         self,
-        model: HybridModel,
+        model: nn.Module,
         threshold: float = 8.0,
         lr: float = 1e-3,
         weight_decay: float = 1e-6,
