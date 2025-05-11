@@ -2,6 +2,81 @@ import torch
 from torch import nn
 
 
+class NeuralMF(nn.Module):
+    def __init__(
+        self,
+        n_users: int,
+        n_items: int,
+        cat_cardinalities: dict[str, int],
+        numeric_features: list[str],
+        emb_dim: int = 32,
+        hidden_dims: list[int] = [64, 32, 16],
+        dropout: float = 0.5,
+        min_rating: float = 1.0,
+        max_rating: float = 10.0,
+    ):
+        super().__init__()
+
+        # CF embeddings
+        self.user_embedding = nn.Embedding(n_users, emb_dim)
+        self.item_embedding = nn.Embedding(n_items, emb_dim)
+
+        # Content Categories embeddings (CB)
+        self.cat_embeddings = nn.ModuleDict(
+            {
+                key: nn.Embedding(card, emb_dim // 2)
+                for key, card in cat_cardinalities.items()
+            }
+        )
+
+        # MLP
+        n_cat = len(self.cat_embeddings)
+        n_num = len(numeric_features)
+        mlp_input = 2 * emb_dim + n_cat * (emb_dim // 2) + n_num
+        layers = []
+        for h in hidden_dims:
+            layers += [
+                nn.Linear(mlp_input, h),
+                nn.BatchNorm1d(h),
+                nn.ReLU(inplace=True),
+                nn.Dropout(dropout),
+            ]
+            mlp_input = h
+
+        layers.append(nn.Linear(mlp_input, 1))
+        self.mlp = nn.Sequential(*layers)
+
+        # Hyperparameters
+        self.numeric_features = numeric_features
+        self.min_rating = min_rating
+        self.max_rating = max_rating
+
+    def forward(self, batch: dict[str, torch.Tensor]) -> torch.Tensor:
+        u = batch["user_id"].long()
+        i = batch["item_id"].long()
+        u_emb = self.user_embedding(u)
+        i_emb = self.item_embedding(i)
+
+        cat_vecs = [emb(batch[key].long()) for key, emb in self.cat_embeddings.items()]
+        cat_embs = (
+            torch.cat(cat_vecs, dim=1)
+            if cat_vecs
+            else torch.zeros(u.size(0), 0, device=u_emb.device)
+        )
+
+        num_vecs = [batch[n].unsqueeze(1).float() for n in self.numeric_features]
+        num_embs = (
+            torch.cat(num_vecs, dim=1)
+            if num_vecs
+            else torch.zeros(u.size(0), 0, device=u_emb.device)
+        )
+
+        x = torch.cat([u_emb, i_emb, cat_embs, num_embs], dim=1)
+        score = self.mlp(x)
+
+        return score.clamp(min=self.min_rating, max=self.max_rating)
+
+
 class GMFMLP(nn.Module):
     def __init__(
         self,

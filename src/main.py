@@ -1,11 +1,13 @@
+import sys
 import pandas as pd
 import lightning as L
 from lightning.pytorch.callbacks import EarlyStopping, ModelCheckpoint
 from pathlib import Path
+from torch import nn
 
 import db
 from engine import UcoRecSys
-from models import GMFMLP
+from models import GMFMLP, NeuralMF
 from dataset import ELearningDataModule
 from config import (
     EPOCHS,
@@ -59,6 +61,7 @@ def get_test_predictions(
     threshold: float,
 ) -> pd.DataFrame:
     raw_outputs = trainer.predict(model, datamodule=dm)
+    print(f"Predictions shape: {raw_outputs}")
 
     flat = []
     for batch_out in raw_outputs:
@@ -80,6 +83,59 @@ def get_test_predictions(
     df["pred_target"] = (df["prediction"] >= threshold).astype(int)
 
     return df
+
+
+def eval_model(models: list[nn.Module], dm: L.LightningDataModule):
+    for model in models:
+        recsys = UcoRecSys(
+            model=model,
+            k=K,
+            threshold=THRESHOLD,
+        )
+
+        early_stop = EarlyStopping(
+            monitor="val_loss",
+            patience=PATIENCE,
+            mode="min",
+            min_delta=DELTA,
+            verbose=True,
+        )
+
+        checkpoint = ModelCheckpoint(
+            monitor="val_loss", mode="min", save_top_k=1, filename="best-model"
+        )
+
+        trainer = L.Trainer(
+            max_epochs=EPOCHS,
+            accelerator="auto",
+            devices="auto",
+            callbacks=[early_stop, checkpoint],
+            log_every_n_steps=10,
+            fast_dev_run=FAST_DEV_RUN,
+        )
+
+        trainer.fit(recsys, datamodule=dm)
+
+        if not FAST_DEV_RUN:
+            recsys = UcoRecSys.load_from_checkpoint(
+                trainer.checkpoint_callback.best_model_path,
+                model=model,
+                k=K,
+                threshold=THRESHOLD,
+            )
+
+        trainer.test(model=recsys, datamodule=dm)
+        df = get_test_predictions(trainer, recsys, dm, THRESHOLD)
+        print("\n", df)
+
+        image_path = (
+            sys.argv[1]
+            if len(sys.argv) > 1
+            else f"ratings_vs_predictions_{model.__class__.__name__}.png"
+        )
+        ax = df.plot(kind="scatter", x="rating", y="prediction", s=32, alpha=0.8)
+        fig = ax.get_figure()
+        fig.savefig(image_path, dpi=300, bbox_inches="tight")
 
 
 def main():
@@ -104,56 +160,22 @@ def main():
     print(f"Val shape: {dm.val_df.shape}")
     print(f"Test shape: {dm.test_df.shape}")
 
-    model = GMFMLP(
-        n_users=dm.num_users,
-        n_items=dm.num_items,
-        numeric_features=dm.numeric_features,
-        cat_cardinalities=dm.cat_cardinalities,
-    )
+    models = [
+        GMFMLP(
+            n_users=dm.num_users,
+            n_items=dm.num_items,
+            numeric_features=dm.numeric_features,
+            cat_cardinalities=dm.cat_cardinalities,
+        ),
+        NeuralMF(
+            n_users=dm.num_users,
+            n_items=dm.num_items,
+            numeric_features=dm.numeric_features,
+            cat_cardinalities=dm.cat_cardinalities,
+        ),
+    ]
 
-    recsys = UcoRecSys(
-        model=model,
-        k=K,
-        threshold=THRESHOLD,
-    )
-
-    early_stop = EarlyStopping(
-        monitor="val_loss",
-        patience=PATIENCE,
-        mode="min",
-        min_delta=DELTA,
-        verbose=True,
-    )
-
-    checkpoint = ModelCheckpoint(
-        monitor="val_loss", mode="min", save_top_k=1, filename="best-model"
-    )
-
-    trainer = L.Trainer(
-        max_epochs=EPOCHS,
-        accelerator="auto",
-        devices="auto",
-        callbacks=[early_stop, checkpoint],
-        log_every_n_steps=10,
-        fast_dev_run=FAST_DEV_RUN,
-    )
-
-    trainer.fit(recsys, datamodule=dm)
-
-    if not FAST_DEV_RUN:
-        recsys = UcoRecSys.load_from_checkpoint(
-            trainer.checkpoint_callback.best_model_path,
-            model=model,
-            k=K,
-            threshold=THRESHOLD,
-        )
-
-    trainer.test(model=recsys, datamodule=dm)
-    df = get_test_predictions(trainer, recsys, dm, THRESHOLD)
-    print("\n", df.head(10))
-    ax = df.plot(kind="scatter", x="rating", y="prediction", s=32, alpha=0.8)
-    fig = ax.get_figure()
-    fig.savefig("ratings_vs_predictions.png", dpi=300, bbox_inches="tight")
+    eval_model(models, dm)
 
 
 if __name__ == "__main__":
