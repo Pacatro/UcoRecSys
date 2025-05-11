@@ -4,7 +4,8 @@ from lightning.pytorch.callbacks import EarlyStopping, ModelCheckpoint
 from pathlib import Path
 
 import db
-from model import UcoRecSys, GMFMLP
+from engine import UcoRecSys
+from models import GMFMLP
 from dataset import ELearningDataModule
 from config import (
     EPOCHS,
@@ -19,20 +20,6 @@ from config import (
     FEATURES,
     TARGET,
 )
-
-
-def balance_dataset(df: pd.DataFrame) -> pd.DataFrame:
-    df_eq_10 = df[df["rating"] == 10]
-    df_not_eq_10 = df[df["rating"] != 10]
-
-    min_count = min(len(df_eq_10), len(df_not_eq_10))
-
-    df_eq_10_sampled = df_eq_10.sample(n=min_count, random_state=42)
-    df_not_eq_10_sampled = df_not_eq_10.sample(n=min_count, random_state=42)
-
-    df = pd.concat([df_eq_10_sampled, df_not_eq_10_sampled])
-
-    return df
 
 
 def load_data(features: list[str], target: str) -> pd.DataFrame:
@@ -110,8 +97,12 @@ def main():
 
     df = load_data(features=FEATURES, target=TARGET)
 
-    dm = ELearningDataModule(df, target=TARGET, batch_size=BATCH_SIZE)
+    dm = ELearningDataModule(df, target=TARGET, batch_size=BATCH_SIZE, balance=BALANCE)
     dm.setup()
+
+    print(f"Train shape: {dm.train_df.shape}")
+    print(f"Val shape: {dm.val_df.shape}")
+    print(f"Test shape: {dm.test_df.shape}")
 
     model = GMFMLP(
         n_users=dm.num_users,

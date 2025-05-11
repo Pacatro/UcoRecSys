@@ -70,6 +70,9 @@ class ELearningDataModule(L.LightningDataModule):
 
         self.train_df, self.val_df, self.test_df = self._split_data()
 
+        if balance:
+            self.train_df = self._balance_dataset(self.train_df)
+
     def _split_data(self) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
         n = len(self.df)
         train_end = int(self.train_frac * n)
@@ -80,6 +83,19 @@ class ELearningDataModule(L.LightningDataModule):
         test_df = self.df.iloc[val_end:]
 
         return train_df, val_df, test_df
+
+    def _balance_dataset(self, df: pd.DataFrame) -> pd.DataFrame:
+        df_eq_10 = df[df["rating"] == 10]
+        df_not_eq_10 = df[df["rating"] != 10]
+
+        min_count = min(len(df_eq_10), len(df_not_eq_10))
+
+        df_eq_10_sampled = df_eq_10.sample(n=min_count, random_state=42)
+        df_not_eq_10_sampled = df_not_eq_10.sample(n=min_count, random_state=42)
+
+        df = pd.concat([df_eq_10_sampled, df_not_eq_10_sampled])
+
+        return df
 
     def setup(self, stage: str = None):
         if stage == "fit":
