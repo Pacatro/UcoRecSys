@@ -1,4 +1,3 @@
-import sys
 import pandas as pd
 import lightning as L
 from lightning.pytorch.callbacks import EarlyStopping, ModelCheckpoint
@@ -7,8 +6,10 @@ from torch import nn
 
 import db
 from engine import UcoRecSys
-from models import GMFMLP, NeuralMF
-from dataset import ELearningDataModule
+from models import DeepHybridModel
+
+# from dataset import ELearningDataModule
+from model_eval import cross_validate_loo
 from config import (
     EPOCHS,
     BATCH_SIZE,
@@ -150,29 +151,20 @@ def main():
 
     df = load_data(features=FEATURES, target=TARGET)
 
-    dm = ELearningDataModule(df, target=TARGET, batch_size=BATCH_SIZE, balance=BALANCE)
-    dm.setup()
+    _, avg_metrics = cross_validate_loo(
+        df,
+        target=TARGET,
+        model_cls=DeepHybridModel,
+        batch_size=BATCH_SIZE,
+        epochs=EPOCHS,
+        threshold=THRESHOLD,
+        patience=PATIENCE,
+        delta=DELTA,
+        k=K,
+    )
 
-    print(f"Train shape: {dm.train_df.shape}")
-    print(f"Val shape: {dm.val_df.shape}")
-    print(f"Test shape: {dm.test_df.shape}")
-
-    models = [
-        GMFMLP(
-            n_users=dm.num_users,
-            n_items=dm.num_items,
-            numeric_features=dm.numeric_features,
-            cat_cardinalities=dm.cat_cardinalities,
-        ),
-        NeuralMF(
-            n_users=dm.num_users,
-            n_items=dm.num_items,
-            numeric_features=dm.numeric_features,
-            cat_cardinalities=dm.cat_cardinalities,
-        ),
-    ]
-
-    eval_model(models, dm)
+    print("\n--- Avg metrics LOO ---")
+    print(avg_metrics)
 
 
 if __name__ == "__main__":

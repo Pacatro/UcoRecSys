@@ -22,12 +22,14 @@ class UcoRecSys(L.LightningModule):
         k: int = 10,
     ):
         super().__init__()
+        self.save_hyperparameters(ignore=["model"])
         self.model = model
         self.loss_fn = nn.MSELoss()
         self.threshold = threshold
         self.lr = lr
         self.weight_decay = weight_decay
-        # metrics
+
+        # Define retrieval metrics with user grouping via indexes
         metrics = MetricCollection(
             RetrievalPrecision(top_k=k, adaptive_k=True),
             RetrievalRecall(top_k=k),
@@ -52,36 +54,48 @@ class UcoRecSys(L.LightningModule):
     def step(self, batch, metrics, prefix):
         preds = self.model(batch)
         loss = self.loss_fn(preds, batch["rating"].float())
+
+        # Binarize ratings to relevance labels
         target = (batch["rating"] >= self.threshold).int()
-        metrics.update(preds, target, indexes=batch["user_id"].long())
+        user_ids = batch["user_id"].long()
 
-        self.log(f"{prefix}_loss", loss, prog_bar=(prefix != "train"))
+        metrics.update(
+            preds,
+            target,
+            indexes=user_ids,
+        )
 
-        if prefix != "train":
-            self.log(f"{prefix}_rmse", torch.sqrt(loss), prog_bar=True)
+        self.log(f"{prefix}_loss", loss, prog_bar=True)
+        self.log(f"{prefix}_rmse", torch.sqrt(loss), prog_bar=True)
 
         return loss
 
     def training_step(self, batch):
         return self.step(batch, self.train_metrics, "train")
 
+    def on_train_epoch_start(self):
+        self.train_metrics.reset()
+
     def on_train_epoch_end(self):
         self.log_dict(self.train_metrics.compute())
-        self.train_metrics.reset()
 
     def validation_step(self, batch):
         self.step(batch, self.val_metrics, "val")
 
+    def on_validation_epoch_start(self):
+        self.val_metrics.reset()
+
     def on_validation_epoch_end(self):
         self.log_dict(self.val_metrics.compute())
-        self.val_metrics.reset()
 
     def test_step(self, batch):
         self.step(batch, self.test_metrics, "test")
 
+    def on_test_epoch_start(self):
+        self.test_metrics.reset()
+
     def on_test_epoch_end(self):
         self.log_dict(self.test_metrics.compute())
-        self.test_metrics.reset()
 
     def predict_step(self, batch):
         score = self.model(batch)
@@ -93,13 +107,13 @@ class UcoRecSys(L.LightningModule):
         }
 
     def configure_optimizers(self):
-        opt = torch.optim.Adam(
+        optimizer = torch.optim.Adam(
             self.parameters(), lr=self.lr, weight_decay=self.weight_decay
         )
-        sched = torch.optim.lr_scheduler.ReduceLROnPlateau(
-            opt, mode="min", factor=0.5, patience=3
+        scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+            optimizer, mode="min", factor=0.5, patience=3
         )
         return {
-            "optimizer": opt,
-            "lr_scheduler": {"scheduler": sched, "monitor": "val_loss"},
+            "optimizer": optimizer,
+            "lr_scheduler": {"scheduler": scheduler, "monitor": "val_loss"},
         }

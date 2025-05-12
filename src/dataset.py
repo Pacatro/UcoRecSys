@@ -50,6 +50,8 @@ class ELearningDataModule(L.LightningDataModule):
         self.train_frac = train_frac
         self.val_frac = val_frac
         self.num_features = len(df.columns)
+        self.min_rating = df["rating"].min()
+        self.max_rating = df["rating"].max()
 
         self.encoders = {}
         self.scalers = {}
@@ -99,17 +101,18 @@ class ELearningDataModule(L.LightningDataModule):
         return df
 
     def setup(self, stage: str = None):
-        if stage == "fit":
-            self.train_dataset = ELearningDataset(
-                self.train_df, encoders=self.encoders, scalers=self.scalers
-            )
-            self.val_dataset = ELearningDataset(
-                self.val_df, encoders=self.encoders, scalers=self.scalers
-            )
-        elif stage == "test":
-            self.test_dataset = ELearningDataset(
-                self.test_df, encoders=self.encoders, scalers=self.scalers
-            )
+        match stage:
+            case "fit":
+                self.train_dataset = ELearningDataset(
+                    self.train_df, encoders=self.encoders, scalers=self.scalers
+                )
+                self.val_dataset = ELearningDataset(
+                    self.val_df, encoders=self.encoders, scalers=self.scalers
+                )
+            case "test":
+                self.test_dataset = ELearningDataset(
+                    self.test_df, encoders=self.encoders, scalers=self.scalers
+                )
 
     def train_dataloader(self, num_workers: int = 2):
         return DataLoader(
