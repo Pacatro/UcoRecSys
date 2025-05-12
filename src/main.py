@@ -1,4 +1,5 @@
 import pandas as pd
+import json
 import lightning as L
 from lightning.pytorch.callbacks import EarlyStopping, ModelCheckpoint
 from pathlib import Path
@@ -6,7 +7,7 @@ from torch import nn
 
 import db
 from engine import UcoRecSys
-from models import DeepHybridModel
+from models import GMFMLP, DeepHybridModel, NeuralMF
 
 # from dataset import ELearningDataModule
 from model_eval import cross_validate_loo
@@ -151,20 +152,25 @@ def main():
 
     df = load_data(features=FEATURES, target=TARGET)
 
-    _, avg_metrics = cross_validate_loo(
-        df,
-        target=TARGET,
-        model_cls=DeepHybridModel,
-        batch_size=BATCH_SIZE,
-        epochs=EPOCHS,
-        threshold=THRESHOLD,
-        patience=PATIENCE,
-        delta=DELTA,
-        k=K,
-    )
+    models = [NeuralMF, GMFMLP, DeepHybridModel]
 
-    print("\n--- Avg metrics LOO ---")
-    print(avg_metrics)
+    for model in models:
+        _, avg_metrics = cross_validate_loo(
+            df,
+            target=TARGET,
+            model_cls=model,
+            batch_size=BATCH_SIZE,
+            epochs=EPOCHS,
+            threshold=THRESHOLD,
+            patience=PATIENCE,
+            delta=DELTA,
+            k=K,
+        )
+
+        print(f"\n--- Avg metrics LOO ({model.__name__}) ---")
+        print(avg_metrics)
+        with open(f"{model.__name__}cross_validate_loo_metrics.json", "w") as f:
+            json.dump(avg_metrics, f)
 
 
 if __name__ == "__main__":

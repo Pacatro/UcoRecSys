@@ -2,64 +2,6 @@ import torch
 from torch import nn
 
 
-class BasicNeuralMF(nn.Module):
-    def __init__(
-        self,
-        n_users: int,
-        n_items: int,
-        additional_features: list[str],
-        emb_dim: int = 128,
-        hidden_dims: list[int] = [256, 128, 64, 32, 16],
-        dropout: float = 0.1,
-        min_rating: float = 1.0,
-        max_rating: float = 10.0,
-    ):
-        super().__init__()
-
-        # CF embeddings
-        self.user_embedding = nn.Embedding(n_users, emb_dim)
-        self.item_embedding = nn.Embedding(n_items, emb_dim)
-
-        # MLP
-        n_num = len(additional_features)
-        mlp_input = 2 * emb_dim + n_num
-        layers = []
-        for h in hidden_dims:
-            layers += [
-                nn.Linear(mlp_input, h),
-                nn.BatchNorm1d(h),
-                nn.ReLU(inplace=True),
-                nn.Dropout(dropout),
-            ]
-            mlp_input = h
-
-        layers.append(nn.Linear(mlp_input, 1))
-        self.mlp = nn.Sequential(*layers)
-
-        # Hyperparameters
-        self.additional_features = additional_features
-        self.min_rating = min_rating
-        self.max_rating = max_rating
-
-    def forward(self, batch: dict[str, torch.Tensor]) -> torch.Tensor:
-        u = batch["user_id"].long()
-        i = batch["item_id"].long()
-        u_emb = self.user_embedding(u)
-        i_emb = self.item_embedding(i)
-
-        num_vecs = [batch[n].unsqueeze(1).float() for n in self.additional_features]
-        num_embs = (
-            torch.cat(num_vecs, dim=1)
-            if num_vecs
-            else torch.zeros(u.size(0), 0, device=u_emb.device)
-        )
-
-        x = torch.cat([u_emb, i_emb, num_embs], dim=1)
-        score = self.mlp(x)
-
-        return score.clamp(min=self.min_rating, max=self.max_rating).squeeze(1)
-
-
 class NeuralMF(nn.Module):
     def __init__(
         self,
@@ -229,6 +171,11 @@ class GMFMLP(nn.Module):
 
 
 class DeepHybridModel(nn.Module):
+    """
+    Hybrid model that combines a Deep Neural Network (DNN) for Content Based Filtering (CBF) and a Matrix Factorization (MF) model for Collaborative Filtering (CF).
+    Paper: https://arxiv.org/abs/2009.09748
+    """
+
     def __init__(
         self,
         n_users: int,
@@ -296,12 +243,12 @@ class DeepHybridModel(nn.Module):
         user_id = batch["user_id"].long()
         item_id = batch["item_id"].long()
 
-        # MF branch
+        # MF branch (CF)
         u_mf = self.user_mf_emb(user_id)
         i_mf = self.item_mf_emb(item_id)
         mf_score = (u_mf * i_mf).sum(dim=1, keepdim=True)
 
-        # DNN branch
+        # DNN branch (CBF)
         u_dnn = self.user_dnn_emb(user_id)
         i_dnn = self.item_dnn_emb(item_id)
 
