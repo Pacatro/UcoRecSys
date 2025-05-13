@@ -39,17 +39,19 @@ def cross_validate_loo(
 
     for idx, (train_idx, test_idx) in enumerate(loo.split(df), start=1):
         print(f"\n--- Fold {idx}/{len(df)} (LOO) ---")
+
         train_df = df.iloc[train_idx].reset_index(drop=True)
         test_df = df.iloc[test_idx].reset_index(drop=True)
 
+        combined = pd.concat([train_df, test_df])
+
         dm = ELearningDataModule(
-            df,
+            df=combined,
             target=target,
             batch_size=batch_size,
-            threshold=threshold,
             balance=False,
-            train_frac=0.98,
-            val_frac=0.01,
+            train_frac=len(train_df) / len(combined),
+            val_frac=0,
         )
 
         dm.train_df = train_df
@@ -57,16 +59,11 @@ def cross_validate_loo(
         dm.setup(stage="fit")
         dm.setup(stage="test")
 
-        cat_cardinalities = dm.cat_cardinalities
-        numeric_features = dm.numeric_features
         model = model_cls(
             n_users=dm.num_users,
             n_items=dm.num_items,
-            cat_cardinalities=cat_cardinalities,
-            numeric_features=numeric_features,
-            emb_dim=32,
-            hidden_dims=[64, 32, 16],
-            dropout=0.5,
+            cat_cardinalities=dm.cat_cardinalities,
+            numeric_features=dm.numeric_features,
             min_rating=dm.min_rating,
             max_rating=dm.max_rating,
         )

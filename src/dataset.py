@@ -1,7 +1,7 @@
 import pandas as pd
 import torch
 from torch.utils.data import Dataset, DataLoader
-from sklearn.preprocessing import LabelEncoder, StandardScaler
+from sklearn.preprocessing import LabelEncoder, MinMaxScaler
 import lightning as L
 
 
@@ -52,26 +52,31 @@ class ELearningDataModule(L.LightningDataModule):
         self.num_features = len(df.columns)
         self.min_rating = df["rating"].min()
         self.max_rating = df["rating"].max()
+        self.sparsity = 1 - len(df) / (self.num_users * self.num_items)
 
         self.encoders = {}
         self.scalers = {}
         self.cat_cardinalities = {}
         self.numeric_features = []
 
-        for col in df.columns:
-            if col != target:
-                if isinstance(df[col].dtype, pd.CategoricalDtype):
-                    self.encoders[col] = LabelEncoder().fit(df[col])
-                    if col not in ["user_id", "item_id"]:
-                        self.cat_cardinalities[col] = df[col].nunique()
-                else:
-                    self.scalers[col] = StandardScaler().fit(df[[col]])
-                    self.numeric_features.append(col)
+        self.df["user_id"] = LabelEncoder().fit_transform(self.df["user_id"])
+        self.df["item_id"] = LabelEncoder().fit_transform(self.df["item_id"])
+
+        self.train_df, self.val_df, self.test_df = self._split_data()
+
+        for col in self.train_df.columns:
+            if col == target or col in ["user_id", "item_id"]:
+                continue
+
+            if isinstance(self.train_df[col].dtype, pd.CategoricalDtype):
+                self.encoders[col] = LabelEncoder().fit(self.train_df[col])
+                self.cat_cardinalities[col] = self.train_df[col].nunique()
+            else:
+                self.scalers[col] = MinMaxScaler().fit(self.train_df[[col]])
+                self.numeric_features.append(col)
 
         self.num_cat_features = len(self.cat_cardinalities)
         self.num_num_features = len(self.numeric_features)
-
-        self.train_df, self.val_df, self.test_df = self._split_data()
 
         if balance:
             self.train_df = self._balance_dataset(self.train_df)

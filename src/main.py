@@ -8,8 +8,7 @@ from torch import nn
 import db
 from engine import UcoRecSys
 from models import GMFMLP, DeepHybridModel, NeuralMF
-
-# from dataset import ELearningDataModule
+from dataset import ELearningDataModule
 from model_eval import cross_validate_loo
 from config import (
     EPOCHS,
@@ -43,15 +42,13 @@ def load_data(features: list[str], target: str) -> pd.DataFrame:
 
     df["Difficulty"] = df["Difficulty"].fillna("Undefined").astype("category")
     df["type"] = df["type"].fillna("Undefined").astype("category")
-    df["user_id"] = df["user_id"].astype("category")
-    df["item_id"] = df["item_id"].astype("category")
 
     df.rename(
         columns={"Difficulty": "difficulty", "type": "item_type"},
         inplace=True,
     )
 
-    df.sort_values(by="created_at", inplace=True, ascending=False)
+    df = df.sort_values(by="created_at", ascending=False)
 
     return df[features + [target]]
 
@@ -79,7 +76,6 @@ def get_test_predictions(
 
     df = pd.DataFrame(flat)
 
-    # 3) Definimos la columna target binaria
     df["target"] = (df["rating"] >= threshold).astype(int)
     df["pred_target"] = (df["prediction"] >= threshold).astype(int)
 
@@ -152,25 +148,58 @@ def main():
 
     df = load_data(features=FEATURES, target=TARGET)
 
-    models = [NeuralMF, GMFMLP, DeepHybridModel]
+    dm = ELearningDataModule(df, target=TARGET, batch_size=BATCH_SIZE, balance=BALANCE)
+    print(f"Dataset sparsity: {dm.sparsity}")
+    dm.setup("fit")
+    print(dm.train_dataset.df.shape, dm.val_dataset.df.shape)
+    print(dm.train_dataset.df)
 
-    for model in models:
-        _, avg_metrics = cross_validate_loo(
-            df,
-            target=TARGET,
-            model_cls=model,
-            batch_size=BATCH_SIZE,
-            epochs=EPOCHS,
-            threshold=THRESHOLD,
-            patience=PATIENCE,
-            delta=DELTA,
+    model = NeuralMF(
+        n_users=dm.num_users,
+        n_items=dm.num_items,
+        numeric_features=dm.numeric_features,
+        cat_cardinalities=dm.cat_cardinalities,
+    )
+
+    recsys = UcoRecSys(
+        model=model,
+        k=K,
+        threshold=THRESHOLD,
+    )
+
+    early_stop = EarlyStopping(
+        monitor="val_loss",
+        patience=PATIENCE,
+        mode="min",
+        min_delta=DELTA,
+        verbose=True,
+    )
+
+    checkpoint = ModelCheckpoint(
+        monitor="val_loss", mode="min", save_top_k=1, filename="best-model"
+    )
+
+    trainer = L.Trainer(
+        max_epochs=EPOCHS,
+        accelerator="auto",
+        devices="auto",
+        callbacks=[early_stop, checkpoint],
+        log_every_n_steps=10,
+        fast_dev_run=FAST_DEV_RUN,
+    )
+
+    trainer.fit(recsys, datamodule=dm)
+
+    if not FAST_DEV_RUN:
+        recsys = UcoRecSys.load_from_checkpoint(
+            trainer.checkpoint_callback.best_model_path,
+            model=model,
             k=K,
+            threshold=THRESHOLD,
         )
 
-        print(f"\n--- Avg metrics LOO ({model.__name__}) ---")
-        print(avg_metrics)
-        with open(f"{model.__name__}cross_validate_loo_metrics.json", "w") as f:
-            json.dump(avg_metrics, f)
+    dm.setup("test")
+    trainer.test(model=recsys, datamodule=dm)
 
 
 if __name__ == "__main__":
