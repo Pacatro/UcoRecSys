@@ -47,9 +47,7 @@ def cross_validate(
         recsys = UcoRecSys(model=model)
 
         trainer = L.Trainer(
-            logger=TensorBoardLogger(
-                name="ucorecsys", log_graph=True, save_dir="lightning_logs"
-            ),
+            logger=TensorBoardLogger(name="ucorecsys", save_dir="lightning_logs"),
             max_epochs=epochs,
             accelerator="auto",
             devices="auto",

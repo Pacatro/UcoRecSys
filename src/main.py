@@ -79,9 +79,7 @@ def inference(df: pd.DataFrame):
     )
 
     trainer = L.Trainer(
-        logger=TensorBoardLogger(
-            name="ucorecsys", log_graph=True, save_dir="lightning_logs"
-        ),
+        logger=TensorBoardLogger(name="ucorecsys", save_dir="lightning_logs"),
         max_epochs=config.EPOCHS,
         accelerator="auto",
         devices="auto",
