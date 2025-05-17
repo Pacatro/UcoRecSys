@@ -66,7 +66,7 @@ def inference(df: pd.DataFrame):
     )
 
     early_stop = EarlyStopping(
-        monitor="val_loss",
+        monitor="val/loss",
         patience=config.PATIENCE,
         mode="min",
         min_delta=config.DELTA,
@@ -74,7 +74,7 @@ def inference(df: pd.DataFrame):
     )
 
     checkpoint = ModelCheckpoint(
-        monitor="val_loss", mode="min", save_top_k=1, filename="best-model"
+        monitor="val/loss", mode="min", save_top_k=1, filename="best-model"
     )
 
     trainer = L.Trainer(
@@ -103,7 +103,7 @@ def inference(df: pd.DataFrame):
 
 def eval_model(df: pd.DataFrame):
     early_stop = EarlyStopping(
-        monitor="val_loss",
+        monitor="val/loss",
         patience=config.PATIENCE,
         mode="min",
         min_delta=config.DELTA,
@@ -111,7 +111,7 @@ def eval_model(df: pd.DataFrame):
     )
 
     checkpoint = ModelCheckpoint(
-        monitor="val_loss", mode="min", save_top_k=1, filename="best-model"
+        monitor="val/loss", mode="min", save_top_k=1, filename="best-model"
     )
 
     avg_metrics = cross_validate(
@@ -136,8 +136,12 @@ def main():
 
     model_parser = ArgumentParser(prog="ucorecsys")
 
-    model_parser.add_argument("--inference", action="store_true", help="Run inference")
-    model_parser.add_argument("--eval", action="store_true", help="Run evaluation")
+    model_parser.add_argument(
+        "-i", "--inference", action="store_true", help="Run inference"
+    )
+    model_parser.add_argument(
+        "-e", "--eval", action="store_true", help="Run evaluation"
+    )
 
     args = model_parser.parse_args()
 
