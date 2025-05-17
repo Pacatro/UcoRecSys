@@ -2,6 +2,7 @@ import pandas as pd
 import torch
 from torch.utils.data import Dataset, DataLoader
 from sklearn.preprocessing import LabelEncoder, MinMaxScaler
+from sklearn.model_selection import train_test_split
 import lightning as L
 
 
@@ -31,8 +32,8 @@ class ELearningDataModule(L.LightningDataModule):
         batch_size: int = 32,
         threshold: float = 7.5,
         balance: bool = False,
-        train_frac: float = 0.6,
-        val_frac: float = 0.2,
+        test_size: float = 0.2,
+        val_size: float = 0.1,
     ):
         super().__init__()
         self.df = df.copy()
@@ -47,8 +48,8 @@ class ELearningDataModule(L.LightningDataModule):
         self.num_users = df["user_id"].nunique()
         self.num_items = df["item_id"].nunique()
         self.global_mean = df["rating"].mean()
-        self.train_frac = train_frac
-        self.val_frac = val_frac
+        self.test_size = test_size
+        self.val_size = val_size
         self.num_features = len(df.columns)
         self.min_rating = df["rating"].min()
         self.max_rating = df["rating"].max()
@@ -82,13 +83,12 @@ class ELearningDataModule(L.LightningDataModule):
             self.train_df = self._balance_dataset(self.train_df)
 
     def _split_data(self) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
-        n = len(self.df)
-        train_end = int(self.train_frac * n)
-        val_end = int((self.train_frac + self.val_frac) * n)
+        if self.test_size == 0:
+            train_df, val_df = train_test_split(self.df, test_size=self.val_size)
+            return train_df, val_df, None
 
-        train_df = self.df.iloc[:train_end]
-        val_df = self.df.iloc[train_end:val_end]
-        test_df = self.df.iloc[val_end:]
+        train_df, test_df = train_test_split(self.df, test_size=self.test_size)
+        train_df, val_df = train_test_split(train_df, test_size=self.val_size)
 
         return train_df, val_df, test_df
 
