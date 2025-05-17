@@ -150,9 +150,6 @@ def main():
         inference(df)
     elif args.eval:
         evaluation(df)
-    else:
-        print("Must specify either --inference or --eval")
-        return
 
 
 if __name__ == "__main__":
