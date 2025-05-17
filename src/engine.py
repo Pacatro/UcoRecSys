@@ -29,7 +29,6 @@ class UcoRecSys(L.LightningModule):
         self.lr = lr
         self.weight_decay = weight_decay
 
-        # Define retrieval metrics with user grouping via indexes
         metrics = MetricCollection(
             RetrievalPrecision(top_k=k, adaptive_k=True),
             RetrievalRecall(top_k=k),
@@ -38,6 +37,7 @@ class UcoRecSys(L.LightningModule):
             RetrievalMAP(top_k=k),
             RetrievalMRR(top_k=k),
         )
+
         self.test_metrics = metrics.clone(prefix="test/")
         self.val_metrics = metrics.clone(prefix="val/")
 
@@ -64,8 +64,8 @@ class UcoRecSys(L.LightningModule):
                 indexes=user_ids,
             )
 
-        self.log(f"{prefix}_loss", loss, prog_bar=True)
-        self.log(f"{prefix}_rmse", torch.sqrt(loss), prog_bar=True)
+        self.log(f"{prefix}/loss", loss, prog_bar=True)
+        self.log(f"{prefix}/rmse", torch.sqrt(loss), prog_bar=True)
 
         return loss
 
@@ -102,5 +102,5 @@ class UcoRecSys(L.LightningModule):
         )
         return {
             "optimizer": optimizer,
-            "lr_scheduler": {"scheduler": scheduler, "monitor": "val_loss"},
+            "lr_scheduler": {"scheduler": scheduler, "monitor": "val/loss"},
         }

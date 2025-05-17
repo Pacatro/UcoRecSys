@@ -42,6 +42,7 @@ def cross_validate(
             n_users=dm.num_users,
             n_items=dm.num_items,
         )
+
         recsys = UcoRecSys(model=model)
 
         trainer = L.Trainer(
@@ -50,6 +51,9 @@ def cross_validate(
             devices="auto",
             callbacks=callbacks,
             log_every_n_steps=10,
+            enable_model_summary=False,
+            inference_mode=False,
+            enable_progress_bar=False,
         )
 
         trainer.fit(recsys, datamodule=dm)
@@ -58,6 +62,7 @@ def cross_validate(
             model=model,
         )
         metrics = trainer.validate(recsys, datamodule=dm)
+        print(metrics[0])
         fold_metrics.append(metrics[0])
 
     avg_metrics = pd.DataFrame(fold_metrics).mean()

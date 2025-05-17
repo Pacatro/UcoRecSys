@@ -3,9 +3,10 @@ import lightning as L
 import pandas as pd
 from lightning.pytorch.callbacks import EarlyStopping, ModelCheckpoint
 from argparse import ArgumentParser
+import json
 
 import db
-from model_eval import cross_validate
+from evaluation import cross_validate
 import config
 from dataset import ELearningDataModule
 from engine import UcoRecSys
@@ -100,7 +101,7 @@ def inference(df: pd.DataFrame):
     trainer.test(model=recsys, datamodule=dm)
 
 
-def evaluation(df: pd.DataFrame):
+def eval_model(df: pd.DataFrame):
     early_stop = EarlyStopping(
         monitor="val_loss",
         patience=config.PATIENCE,
@@ -124,32 +125,36 @@ def evaluation(df: pd.DataFrame):
 
     print(avg_metrics)
 
+    if avg_metrics is not None:
+        with open("eval_results.json", "w") as f:
+            json.dump(avg_metrics.to_dict(), f)
+
 
 def main():
     if not Path(db.DB_FILE_PATH).exists():
         db.csv_to_sql(verbose=True)
 
-    model_parser = ArgumentParser()
+    model_parser = ArgumentParser(prog="ucorecsys")
 
-    model_parser.add_argument("--inference", default=True, action="store_true")
-    model_parser.add_argument("--eval", default=True, action="store_true")
+    model_parser.add_argument("--inference", action="store_true", help="Run inference")
+    model_parser.add_argument("--eval", action="store_true", help="Run evaluation")
 
     args = model_parser.parse_args()
 
     print(f"Using batch size of {config.BATCH_SIZE}")
     print(f"Using {len(config.FEATURES)} features: {config.FEATURES}")
+    print(f"Balance: {config.BALANCE}\n")
     print(f"k = {config.K}")
     print(f"Patience = {config.PATIENCE}, delta = {config.DELTA}")
     print(f"Threshold = {config.THRESHOLD}")
     print(f"Epochs = {config.EPOCHS}")
-    print(f"Balance: {config.BALANCE}")
 
     df = load_data(features=config.FEATURES, target=config.TARGET)
 
     if args.inference:
         inference(df)
     elif args.eval:
-        evaluation(df)
+        eval_model(df)
 
 
 if __name__ == "__main__":
