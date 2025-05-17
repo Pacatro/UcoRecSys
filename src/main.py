@@ -1,9 +1,10 @@
-from pathlib import Path
-import lightning as L
 import pandas as pd
-from lightning.pytorch.callbacks import EarlyStopping, ModelCheckpoint
-from argparse import ArgumentParser
 import json
+from pathlib import Path
+from argparse import ArgumentParser
+import lightning as L
+from lightning.pytorch.loggers import TensorBoardLogger
+from lightning.pytorch.callbacks import EarlyStopping, ModelCheckpoint
 
 import db
 from evaluation import cross_validate
@@ -78,6 +79,9 @@ def inference(df: pd.DataFrame):
     )
 
     trainer = L.Trainer(
+        logger=TensorBoardLogger(
+            name="ucorecsys", log_graph=True, save_dir="lightning_logs"
+        ),
         max_epochs=config.EPOCHS,
         accelerator="auto",
         devices="auto",
@@ -98,7 +102,9 @@ def inference(df: pd.DataFrame):
         )
 
     dm.setup("test")
-    trainer.test(model=recsys, datamodule=dm)
+    test_metrics = trainer.test(model=recsys, datamodule=dm)[0]
+    with open("inference_results.json", "w") as f:
+        json.dump(test_metrics.to_dict(), f)
 
 
 def eval_model(df: pd.DataFrame):
@@ -123,8 +129,6 @@ def eval_model(df: pd.DataFrame):
         callbacks=[checkpoint, early_stop],
     )
 
-    print(avg_metrics)
-
     if avg_metrics is not None:
         with open("eval_results.json", "w") as f:
             json.dump(avg_metrics.to_dict(), f)
@@ -147,11 +151,11 @@ def main():
 
     print(f"Using batch size of {config.BATCH_SIZE}")
     print(f"Using {len(config.FEATURES)} features: {config.FEATURES}")
-    print(f"Balance: {config.BALANCE}\n")
+    print(f"Balance: {config.BALANCE}")
     print(f"k = {config.K}")
     print(f"Patience = {config.PATIENCE}, delta = {config.DELTA}")
     print(f"Threshold = {config.THRESHOLD}")
-    print(f"Epochs = {config.EPOCHS}")
+    print(f"Epochs = {config.EPOCHS}\n")
 
     df = load_data(features=config.FEATURES, target=config.TARGET)
 

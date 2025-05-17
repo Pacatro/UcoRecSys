@@ -14,3 +14,8 @@ dependencies = [
   "torchmetrics>=1.7.1",
   "lightning>=2.5.1.post0",
 ]
+
+[dependency-groups]
+dev = [
+    "tensorboard>=2.19.0",
+]

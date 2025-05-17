@@ -64,8 +64,14 @@ class UcoRecSys(L.LightningModule):
                 indexes=user_ids,
             )
 
-        self.log(f"{prefix}/loss", loss, prog_bar=True)
-        self.log(f"{prefix}/rmse", torch.sqrt(loss), prog_bar=True)
+        self.log(f"{prefix}/loss", loss, prog_bar=True, on_step=False, on_epoch=True)
+        self.log(
+            f"{prefix}/rmse",
+            torch.sqrt(loss),
+            prog_bar=True,
+            on_step=False,
+            on_epoch=True,
+        )
 
         return loss
 
