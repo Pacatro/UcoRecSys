@@ -1,23 +1,15 @@
-# import lightning as L
-import pandas as pd
 from pathlib import Path
+import lightning as L
+import pandas as pd
+from lightning.pytorch.callbacks import EarlyStopping, ModelCheckpoint
+from argparse import ArgumentParser
 
-# from engine import UcoRecSys
 import db
-from models import NeuralHybrid
 from model_eval import cross_validate
-from config import (
-    EPOCHS,
-    BATCH_SIZE,
-    DELTA,
-    PATIENCE,
-    BINARIZE,
-    BALANCE,
-    K,
-    THRESHOLD,
-    FEATURES,
-    TARGET,
-)
+import config
+from dataset import ELearningDataModule
+from engine import UcoRecSys
+from models import NeuralHybrid
 
 # HACER CROSS VALIDTAION CON SETS DE INTERACCIONES DE USUARIOS
 # Cómo entreanr? --> Entrenamiento normal y corriente
@@ -46,35 +38,121 @@ def load_data(features: list[str], target: str) -> pd.DataFrame:
         inplace=True,
     )
 
-    df = df.sort_values(by="created_at", ascending=False)
-
     return df[features + [target]]
+
+
+def inference(df: pd.DataFrame):
+    dm = ELearningDataModule(
+        df, target=config.TARGET, batch_size=config.BATCH_SIZE, balance=config.BALANCE
+    )
+
+    print(f"Dataset sparsity: {dm.sparsity}")
+
+    dm.setup("fit")
+    print(dm.train_dataset.df.shape, dm.val_dataset.df.shape)
+
+    model = NeuralHybrid(
+        n_users=dm.num_users,
+        n_items=dm.num_items,
+        numeric_features=dm.numeric_features,
+        cat_cardinalities=dm.cat_cardinalities,
+    )
+
+    recsys = UcoRecSys(
+        model=model,
+        k=config.K,
+        threshold=config.THRESHOLD,
+    )
+
+    early_stop = EarlyStopping(
+        monitor="val_loss",
+        patience=config.PATIENCE,
+        mode="min",
+        min_delta=config.DELTA,
+        verbose=True,
+    )
+
+    checkpoint = ModelCheckpoint(
+        monitor="val_loss", mode="min", save_top_k=1, filename="best-model"
+    )
+
+    trainer = L.Trainer(
+        max_epochs=config.EPOCHS,
+        accelerator="auto",
+        devices="auto",
+        callbacks=[early_stop, checkpoint],
+        log_every_n_steps=10,
+        fast_dev_run=config.FAST_DEV_RUN,
+    )
+
+    dm.setup("fit")
+    trainer.fit(recsys, datamodule=dm)
+
+    if not config.FAST_DEV_RUN:
+        recsys = UcoRecSys.load_from_checkpoint(
+            trainer.checkpoint_callback.best_model_path,
+            model=model,
+            k=config.K,
+            threshold=config.THRESHOLD,
+        )
+
+    dm.setup("test")
+    trainer.test(model=recsys, datamodule=dm)
+
+
+def evaluation(df: pd.DataFrame):
+    early_stop = EarlyStopping(
+        monitor="val_loss",
+        patience=config.PATIENCE,
+        mode="min",
+        min_delta=config.DELTA,
+        verbose=False,
+    )
+
+    checkpoint = ModelCheckpoint(
+        monitor="val_loss", mode="min", save_top_k=1, filename="best-model"
+    )
+
+    avg_metrics = cross_validate(
+        df=df,
+        model_class=NeuralHybrid,
+        n_splits=5,
+        random_state=42,
+        epochs=config.EPOCHS,
+        callbacks=[checkpoint, early_stop],
+    )
+
+    print(avg_metrics)
 
 
 def main():
     if not Path(db.DB_FILE_PATH).exists():
         db.csv_to_sql(verbose=True)
 
-    print(f"Using batch size of {BATCH_SIZE}")
-    print(f"Using {len(FEATURES)} features: {FEATURES}")
-    print(f"k = {K}")
-    print(f"Patience = {PATIENCE}, delta = {DELTA}")
-    print(f"Threshold = {THRESHOLD}")
-    print(f"Epochs = {EPOCHS}")
-    print(f"Balance: {BALANCE}")
-    print(f"Binarize: {BINARIZE}\n")
+    model_parser = ArgumentParser()
 
-    df = load_data(features=FEATURES, target=TARGET)
+    model_parser.add_argument("--inference", default=True, action="store_true")
+    model_parser.add_argument("--eval", default=True, action="store_true")
 
-    _, avg_metrics = cross_validate(
-        model_class=NeuralHybrid,
-        df=df,
-        n_splits=5,
-        early_stopping_delta=DELTA,
-        early_stopping_patience=PATIENCE,
-    )
+    args = model_parser.parse_args()
 
-    print(avg_metrics)
+    print(f"Using batch size of {config.BATCH_SIZE}")
+    print(f"Using {len(config.FEATURES)} features: {config.FEATURES}")
+    print(f"k = {config.K}")
+    print(f"Patience = {config.PATIENCE}, delta = {config.DELTA}")
+    print(f"Threshold = {config.THRESHOLD}")
+    print(f"Epochs = {config.EPOCHS}")
+    print(f"Balance: {config.BALANCE}")
+
+    df = load_data(features=config.FEATURES, target=config.TARGET)
+
+    if args.inference:
+        inference(df)
+    elif args.eval:
+        evaluation(df)
+    else:
+        print("Must specify either --inference or --eval")
+        return
 
 
 if __name__ == "__main__":

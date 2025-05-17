@@ -17,11 +17,15 @@ class NeuralHybrid(nn.Module):
     ):
         super().__init__()
 
-        # User-Item embeddings
+        # CF embeddings
         self.user_embedding = nn.Embedding(n_users, emb_dim)
         self.item_embedding = nn.Embedding(n_items, emb_dim)
 
-        # Content Categories embeddings
+        # User-Item biases
+        self.user_bias = nn.Embedding(n_users, 1)
+        self.item_bias = nn.Embedding(n_items, 1)
+
+        # Content Categories embeddings (CB)
         self.cat_embeddings = nn.ModuleDict(
             {
                 key: nn.Embedding(card, emb_dim // 2)
@@ -55,11 +59,9 @@ class NeuralHybrid(nn.Module):
         u = batch["user_id"].long()
         i = batch["item_id"].long()
 
-        # CF
         u_emb = self.user_embedding(u)
         i_emb = self.item_embedding(i)
 
-        # CBF
         cat_vecs = [emb(batch[key].long()) for key, emb in self.cat_embeddings.items()]
         cat_embs = (
             torch.cat(cat_vecs, dim=1)
@@ -74,8 +76,11 @@ class NeuralHybrid(nn.Module):
             else torch.zeros(u.size(0), 0, device=u_emb.device)
         )
 
-        # CBF + CF
+        u_b = self.user_bias(u).squeeze(1)
+        i_b = self.item_bias(i).squeeze(1)
         x = torch.cat([u_emb, i_emb, cat_embs, num_embs], dim=1)
-        score = self.mlp(x)
+        raw = self.mlp(x).squeeze(1) + u_b + i_b
 
-        return score.clamp(min=self.min_rating, max=self.max_rating).squeeze(1)
+        return (
+            torch.sigmoid(raw) * (self.max_rating - self.min_rating) + self.min_rating
+        )

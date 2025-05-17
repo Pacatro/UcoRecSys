@@ -28,7 +28,7 @@ class ELearningDataModule(L.LightningDataModule):
     def __init__(
         self,
         df: pd.DataFrame,
-        target: str,
+        target: str = "rating",
         batch_size: int = 32,
         threshold: float = 7.5,
         balance: bool = False,
@@ -37,10 +37,6 @@ class ELearningDataModule(L.LightningDataModule):
     ):
         super().__init__()
         self.df = df.copy()
-        self.interactions_cols = ["user_id", "item_id", "rating"]
-        self.content_cols = df.columns.difference(self.interactions_cols).tolist() + [
-            "item_id"
-        ]
         self.target = target
         self.batch_size = batch_size
         self.threshold = threshold
@@ -54,19 +50,26 @@ class ELearningDataModule(L.LightningDataModule):
         self.min_rating = df["rating"].min()
         self.max_rating = df["rating"].max()
         self.sparsity = 1 - len(df) / (self.num_users * self.num_items)
+        self.target = target
 
         self.encoders = {}
         self.scalers = {}
         self.cat_cardinalities = {}
         self.numeric_features = []
 
+        self._prepare_scalers()
+
+        if balance:
+            self.train_df = self._balance_dataset(self.train_df)
+
+    def _prepare_scalers(self):
         self.df["user_id"] = LabelEncoder().fit_transform(self.df["user_id"])
         self.df["item_id"] = LabelEncoder().fit_transform(self.df["item_id"])
 
         self.train_df, self.val_df, self.test_df = self._split_data()
 
         for col in self.train_df.columns:
-            if col == target or col in ["user_id", "item_id"]:
+            if col == self.target or col in ["user_id", "item_id"]:
                 continue
 
             if isinstance(self.train_df[col].dtype, pd.CategoricalDtype):
@@ -79,16 +82,19 @@ class ELearningDataModule(L.LightningDataModule):
         self.num_cat_features = len(self.cat_cardinalities)
         self.num_num_features = len(self.numeric_features)
 
-        if balance:
-            self.train_df = self._balance_dataset(self.train_df)
-
     def _split_data(self) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
         if self.test_size == 0:
-            train_df, val_df = train_test_split(self.df, test_size=self.val_size)
+            train_df, val_df = train_test_split(
+                self.df, test_size=self.val_size, shuffle=True
+            )
             return train_df, val_df, None
 
-        train_df, test_df = train_test_split(self.df, test_size=self.test_size)
-        train_df, val_df = train_test_split(train_df, test_size=self.val_size)
+        train_df, test_df = train_test_split(
+            self.df, test_size=self.test_size, shuffle=True
+        )
+        train_df, val_df = train_test_split(
+            train_df, test_size=self.val_size, shuffle=True
+        )
 
         return train_df, val_df, test_df
 
@@ -129,13 +135,18 @@ class ELearningDataModule(L.LightningDataModule):
 
     def val_dataloader(self, num_workers: int = 2):
         return DataLoader(
-            self.val_dataset, batch_size=self.batch_size, num_workers=num_workers
+            self.val_dataset,
+            batch_size=self.batch_size,
+            num_workers=num_workers,
         )
 
     def test_dataloader(self, num_workers: int = 2):
         return DataLoader(
-            self.test_dataset, batch_size=self.batch_size, num_workers=num_workers
+            self.test_dataset,
+            batch_size=self.batch_size,
+            num_workers=num_workers,
+            shuffle=True,
         )
 
     def predict_dataloader(self):
-        return DataLoader(self.test_dataset, batch_size=self.batch_size)
+        return DataLoader(self.test_dataset, batch_size=self.batch_size, shuffle=True)

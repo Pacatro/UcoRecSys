@@ -38,9 +38,8 @@ class UcoRecSys(L.LightningModule):
             RetrievalMAP(top_k=k),
             RetrievalMRR(top_k=k),
         )
-        self.train_metrics = metrics.clone(prefix="train/")
-        self.val_metrics = metrics.clone(prefix="val/")
         self.test_metrics = metrics.clone(prefix="test/")
+        self.val_metrics = metrics.clone(prefix="val/")
 
     def forward(self, batch):
         score = self.model(batch)
@@ -51,19 +50,19 @@ class UcoRecSys(L.LightningModule):
             "rating": batch["rating"].float(),
         }
 
-    def step(self, batch, metrics, prefix):
+    def step(self, batch, prefix, metrics=None):
         preds = self.model(batch)
         loss = self.loss_fn(preds, batch["rating"].float())
 
-        # Binarize ratings to relevance labels
-        target = (batch["rating"] >= self.threshold).int()
-        user_ids = batch["user_id"].long()
+        if metrics is not None:
+            target = (batch["rating"] >= self.threshold).int()
+            user_ids = batch["user_id"].long()
 
-        metrics.update(
-            preds,
-            target,
-            indexes=user_ids,
-        )
+            metrics.update(
+                preds,
+                target,
+                indexes=user_ids,
+            )
 
         self.log(f"{prefix}_loss", loss, prog_bar=True)
         self.log(f"{prefix}_rmse", torch.sqrt(loss), prog_bar=True)
@@ -71,25 +70,19 @@ class UcoRecSys(L.LightningModule):
         return loss
 
     def training_step(self, batch):
-        return self.step(batch, self.train_metrics, "train")
-
-    def on_train_epoch_start(self):
-        self.train_metrics.reset()
-
-    def on_train_epoch_end(self):
-        self.log_dict(self.train_metrics.compute())
+        return self.step(batch, "train")
 
     def validation_step(self, batch):
-        self.step(batch, self.val_metrics, "val")
+        self.step(batch, "val", metrics=self.val_metrics)
+
+    def test_step(self, batch):
+        self.step(batch, "test", metrics=self.test_metrics)
 
     def on_validation_epoch_start(self):
         self.val_metrics.reset()
 
     def on_validation_epoch_end(self):
         self.log_dict(self.val_metrics.compute())
-
-    def test_step(self, batch):
-        self.step(batch, self.test_metrics, "test")
 
     def on_test_epoch_start(self):
         self.test_metrics.reset()
@@ -98,13 +91,7 @@ class UcoRecSys(L.LightningModule):
         self.log_dict(self.test_metrics.compute())
 
     def predict_step(self, batch):
-        score = self.model(batch)
-        return {
-            "user_id": batch["user_id"].long(),
-            "item_id": batch["item_id"].long(),
-            "prediction": score.detach(),
-            "rating": batch["rating"].float(),
-        }
+        return self.forward(batch)
 
     def configure_optimizers(self):
         optimizer = torch.optim.Adam(
