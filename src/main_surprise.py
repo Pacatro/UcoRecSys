@@ -1,66 +1,40 @@
+import json
 import pandas as pd
+import torch
 from pathlib import Path
-from surprise import Reader, Dataset, SVDpp
-from surprise.model_selection import cross_validate, LeaveOneOut
+from surprise.model_selection import KFold
 from sklearn.preprocessing import LabelEncoder
+from torchmetrics import MetricCollection
+from typing import Callable
+from surprise import (
+    Reader,
+    Dataset,
+    accuracy,
+    AlgoBase,
+    SVDpp,
+    NormalPredictor,
+    BaselineOnly,
+    KNNBasic,
+    KNNWithMeans,
+    KNNWithZScore,
+    KNNBaseline,
+    SVD,
+    NMF,
+    SlopeOne,
+    CoClustering,
+    Prediction,
+)
+from torchmetrics.retrieval import (
+    RetrievalPrecision,
+    RetrievalRecall,
+    RetrievalNormalizedDCG,
+    RetrievalHitRate,
+    RetrievalMAP,
+    RetrievalMRR,
+)
 
 import db
-
-
-# def get_top_k_preds(predictions, k=10):
-#     """
-#     Transforma una lista de objetos Prediction de Surprise en un DataFrame
-#     con el formato requerido por Evidently para métricas de sistemas de recomendación.
-#
-#     Cada fila contendrá:
-#       - user_id: identificador del usuario
-#       - item_id: identificador del ítem recomendado
-#       - prediction: puntuación estimada por el modelo
-#       - rank: posición en la lista de recomendaciones (1 = mejor)
-#       - target: 1 si el rating real (r_ui) es mayor o igual a 7, 0 en caso contrario
-#
-#     :param predictions: Lista de objetos Prediction de Surprise.
-#     :param k: Top K de recomendaciones. Por defecto 10.
-#     """
-#     top_n = defaultdict(list)
-#     for pred in predictions:
-#         top_n[pred.uid].append(pred)
-#
-#     rows = []
-#     for _, preds in top_n.items():
-#         # Ordena las predicciones para cada usuario de mayor a menor score
-#         preds.sort(key=lambda x: x.est, reverse=True)
-#         for rank, pred in enumerate(preds, start=1):
-#             rows.append(
-#                 {
-#                     "user_id": pred.uid,
-#                     "item_id": pred.iid,
-#                     "prediction": pred.est,
-#                     "rating": pred.r_ui,
-#                     "rank": rank,
-#                     "pred_target": int(pred.est >= 8),
-#                     "target": int(pred.r_ui >= 8),
-#                 }
-#             )
-#     return pd.DataFrame(rows)
-#
-#
-# def generate_report(preds: pd.DataFrame, k: int = 10, report_path: str = "report.html"):
-#     """
-#     Genera un reporte de evidently con los resultados del sistema de recomendación.
-#
-#     :param preds: Las predicciones del sistema.
-#     :param k: Top K de recomendaciones.
-#     :param report_path: El path donde guardar el reporte.
-#     """
-#     pred_df = get_top_k_preds(preds, k=k)
-#
-#     metrics = RecsysPreset(k=10)
-#     report = Report(metrics=[metrics])
-#     report.run(reference_data=None, current_data=pred_df)
-#
-#     report.save_html(filename=report_path)
-#
+import config
 
 
 def preprocess_ratings(df: pd.DataFrame) -> pd.DataFrame:
@@ -74,6 +48,60 @@ def preprocess_ratings(df: pd.DataFrame) -> pd.DataFrame:
     df.loc[:, "user_id"] = le_user.fit_transform(df.user_id.values)
     df.loc[:, "item_id"] = le_course.fit_transform(df.item_id.values)
     return df
+
+
+def calc_metrics(
+    preds: list[Prediction], k: int = 10, threshold: float = 8
+) -> dict[str, float]:
+    indexes = torch.tensor([pred.uid for pred in preds])
+    predictions = torch.tensor([pred.est for pred in preds])
+    target = torch.tensor([pred.r_ui >= threshold for pred in preds])
+
+    metrics = MetricCollection(
+        RetrievalPrecision(top_k=k, adaptive_k=True),
+        RetrievalRecall(top_k=k),
+        RetrievalNormalizedDCG(top_k=k),
+        RetrievalHitRate(top_k=k),
+        RetrievalMAP(top_k=k),
+        RetrievalMRR(top_k=k),
+    )
+
+    metrics.update(predictions, target, indexes=indexes)
+    metrics_results = {k: v.item() for k, v in metrics.compute().items()}
+    rmse = accuracy.rmse(preds, verbose=False)
+    mse = accuracy.mse(preds, verbose=False)
+
+    return {
+        "rmse": rmse,
+        "mse": mse,
+        **metrics_results,
+    }
+
+
+def cross_validation(
+    algo_class: Callable[..., AlgoBase],
+    data: Dataset,
+    n_splits: int = 5,
+    k: int = 10,
+    threshold: float = 8.0,
+    verbose: bool = False,
+) -> dict[str, float]:
+    print(f"Running {algo_class.__name__} cross validation")
+    kf = KFold(n_splits=n_splits, shuffle=True, random_state=42)
+
+    fold_metrics = []
+    for fold, (trainset, testset) in enumerate(kf.split(data), start=1):
+        print(f"Fold {fold}/{n_splits}")
+        algo = algo_class()
+        algo.fit(trainset)
+        preds = algo.test(testset)
+        metrics = calc_metrics(preds, k=k, threshold=threshold)
+        if verbose:
+            print(metrics)
+        fold_metrics.append(metrics)
+
+    avg_metrics = pd.DataFrame(fold_metrics).mean()
+    return avg_metrics.to_dict()
 
 
 def main():
@@ -91,8 +119,27 @@ def main():
     reader = Reader(rating_scale=(1, 10))
     data = Dataset.load_from_df(final_df, reader)
 
-    algo = SVDpp()
-    cross_validate(algo=algo, data=data, cv=LeaveOneOut(), verbose=True)
+    algos = [
+        SVDpp,
+        NormalPredictor,
+        BaselineOnly,
+        KNNBasic,
+        KNNWithMeans,
+        KNNWithZScore,
+        KNNBaseline,
+        SVD,
+        NMF,
+        SlopeOne,
+        CoClustering,
+    ]
+
+    algos_metrics = {}
+    for algo in algos:
+        results = cross_validation(algo_class=algo, data=data, n_splits=5, k=config.K)
+        algos_metrics[algo.__name__] = results
+
+    with open("surprise_metrics.json", "w") as f:
+        json.dump(algos_metrics, f, indent=2)
 
 
 if __name__ == "__main__":

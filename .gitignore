@@ -15,3 +15,6 @@ report.json
 
 # Model checkpoints
 lightning_logs/
+
+# Other exetensions
+*.json

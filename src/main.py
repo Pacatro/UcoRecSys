@@ -102,7 +102,7 @@ def inference(df: pd.DataFrame):
     dm.setup("test")
     test_metrics = trainer.test(model=recsys, datamodule=dm)[0]
     with open("inference_results.json", "w") as f:
-        json.dump(test_metrics.to_dict(), f)
+        json.dump(test_metrics, f, indent=2)
 
 
 def eval_model(df: pd.DataFrame):
@@ -129,7 +129,7 @@ def eval_model(df: pd.DataFrame):
 
     if avg_metrics is not None:
         with open("eval_results.json", "w") as f:
-            json.dump(avg_metrics.to_dict(), f)
+            json.dump(avg_metrics.to_dict(), f, indent=2)
 
 
 def main():
