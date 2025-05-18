@@ -1,8 +1,9 @@
 import json
 import pandas as pd
 import torch
+from typing import Literal
 from pathlib import Path
-from surprise.model_selection import KFold
+from surprise.model_selection import KFold, LeaveOneOut
 from sklearn.preprocessing import LabelEncoder
 from torchmetrics import MetricCollection
 from typing import Callable
@@ -85,13 +86,18 @@ def cross_validation(
     k: int = 10,
     threshold: float = 8.0,
     verbose: bool = False,
+    cv_type: Literal["kfold", "loo"] = "loo",
 ) -> dict[str, float]:
     print(f"Running {algo_class.__name__} cross validation")
-    kf = KFold(n_splits=n_splits, shuffle=True, random_state=42)
-
+    cv = (
+        KFold(n_splits=n_splits, shuffle=True, random_state=42)
+        if cv_type == "kfold"
+        else LeaveOneOut(n_splits=n_splits)
+    )
+    n_folds = cv.get_n_folds()
     fold_metrics = []
-    for fold, (trainset, testset) in enumerate(kf.split(data), start=1):
-        print(f"Fold {fold}/{n_splits}")
+    for fold, (trainset, testset) in enumerate(cv.split(data), start=1):
+        print(f"Fold {fold}/{n_folds}")
         algo = algo_class()
         algo.fit(trainset)
         preds = algo.test(testset)

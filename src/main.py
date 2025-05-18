@@ -5,6 +5,7 @@ from argparse import ArgumentParser
 import lightning as L
 from lightning.pytorch.loggers import TensorBoardLogger
 from lightning.pytorch.callbacks import EarlyStopping, ModelCheckpoint
+from typing import Literal
 
 import db
 from evaluation import cross_validate
@@ -105,7 +106,7 @@ def inference(df: pd.DataFrame):
         json.dump(test_metrics, f, indent=2)
 
 
-def eval_model(df: pd.DataFrame):
+def eval_model(df: pd.DataFrame, cv_type: Literal["kfold", "loo"] = "kfold"):
     early_stop = EarlyStopping(
         monitor="val/loss",
         patience=config.PATIENCE,
@@ -125,10 +126,11 @@ def eval_model(df: pd.DataFrame):
         random_state=42,
         epochs=config.EPOCHS,
         callbacks=[checkpoint, early_stop],
+        cv_type=cv_type,
     )
 
     if avg_metrics is not None:
-        with open("eval_results.json", "w") as f:
+        with open(f"{cv_type}_eval_results.json", "w") as f:
             json.dump(avg_metrics.to_dict(), f, indent=2)
 
 
@@ -142,7 +144,12 @@ def main():
         "-i", "--inference", action="store_true", help="Run inference"
     )
     model_parser.add_argument(
-        "-e", "--eval", action="store_true", help="Run evaluation"
+        "-e",
+        "--eval",
+        action="store",
+        help="Evaluation mode",
+        default="kfold",
+        choices=["kfold", "loo"],
     )
 
     args = model_parser.parse_args()
@@ -159,8 +166,10 @@ def main():
 
     if args.inference:
         inference(df)
-    elif args.eval:
-        eval_model(df)
+
+    if args.eval:
+        print("Eval mode:", args.eval)
+        eval_model(df, args.eval)
 
 
 if __name__ == "__main__":
