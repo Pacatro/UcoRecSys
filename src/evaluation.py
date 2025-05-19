@@ -1,7 +1,7 @@
 from lightning.pytorch.loggers import TensorBoardLogger
 import pandas as pd
 import lightning as L
-from sklearn.model_selection import KFold, LeaveOneGroupOut
+from sklearn.model_selection import KFold, LeaveOneOut
 from typing import Literal
 
 from dataset import ELearningDataModule
@@ -20,13 +20,12 @@ def cross_validate(
     cv = (
         KFold(n_splits=n_splits, random_state=random_state, shuffle=True)
         if cv_type == "kfold"
-        else LeaveOneGroupOut()
+        else LeaveOneOut()
     )
     fold_metrics = []
-    groups = df["user_id"] if cv_type == "loo" else None
-    n_folds = cv.get_n_splits(groups=groups)
+    n_folds = cv.get_n_splits(X=df)
 
-    for fold, (train_idx, test_idx) in enumerate(cv.split(df, groups=groups), start=1):
+    for fold, (train_idx, test_idx) in enumerate(cv.split(df), start=1):
         print(f"Fold {fold}/{n_folds}")
 
         train_df = df.iloc[train_idx].reset_index(drop=True)

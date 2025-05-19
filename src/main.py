@@ -148,7 +148,6 @@ def main():
         "--eval",
         action="store",
         help="Evaluation mode",
-        default="kfold",
         choices=["kfold", "loo"],
     )
 
@@ -166,8 +165,7 @@ def main():
 
     if args.inference:
         inference(df)
-
-    if args.eval:
+    elif args.eval:
         print("Eval mode:", args.eval)
         eval_model(df, args.eval)
 
