@@ -40,7 +40,7 @@ def cross_validate(
 
         model = model_class(
             cat_cardinalities=dm.cat_cardinalities,
-            numeric_features=dm.numeric_features,
+            cont_features=dm.cont_features,
             n_users=dm.num_users,
             n_items=dm.num_items,
         )

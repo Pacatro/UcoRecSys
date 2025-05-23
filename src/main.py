@@ -111,7 +111,7 @@ def inference(df: pd.DataFrame):
     model = NeuralHybrid(
         n_users=dm.num_users,
         n_items=dm.num_items,
-        numeric_features=dm.cont_features,
+        cont_features=dm.cont_features,
         cat_cardinalities=dm.cat_cardinalities,
     )
 

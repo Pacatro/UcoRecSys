@@ -8,7 +8,7 @@ class NeuralHybrid(nn.Module):
         n_users: int,
         n_items: int,
         cat_cardinalities: dict[str, int],
-        numeric_features: list[str],
+        cont_features: list[str],
         emb_dim: int = 128,
         hidden_dims: list[int] = [256, 128, 64, 32, 16],
         dropout: float = 0.1,
@@ -35,7 +35,7 @@ class NeuralHybrid(nn.Module):
 
         # MLP
         n_cat = len(self.cat_embeddings)
-        n_num = len(numeric_features)
+        n_num = len(cont_features)
         mlp_input = 2 * emb_dim + n_cat * (emb_dim // 2) + n_num
         layers = []
         for h in hidden_dims:
@@ -51,7 +51,7 @@ class NeuralHybrid(nn.Module):
         self.mlp = nn.Sequential(*layers)
 
         # Hyperparameters
-        self.numeric_features = numeric_features
+        self.cont_features = cont_features
         self.min_rating = min_rating
         self.max_rating = max_rating
 
@@ -69,7 +69,7 @@ class NeuralHybrid(nn.Module):
             else torch.zeros(u.size(0), 0, device=u_emb.device)
         )
 
-        num_vecs = [batch[n].unsqueeze(1).float() for n in self.numeric_features]
+        num_vecs = [batch[n].unsqueeze(1).float() for n in self.cont_features]
         num_embs = (
             torch.cat(num_vecs, dim=1)
             if num_vecs
