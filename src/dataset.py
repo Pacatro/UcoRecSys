@@ -28,12 +28,14 @@ class ELearningDataModule(L.LightningDataModule):
     def __init__(
         self,
         df: pd.DataFrame,
-        target: str = "rating",
         batch_size: int = 32,
         threshold: float = 7.5,
         balance: bool = False,
         test_size: float = 0.2,
         val_size: float = 0.1,
+        target: str = "rating",
+        user_col: str = "user_id",
+        item_col: str = "item_id",
     ):
         super().__init__()
         self.df = df.copy()
@@ -41,21 +43,23 @@ class ELearningDataModule(L.LightningDataModule):
         self.batch_size = batch_size
         self.threshold = threshold
         self.balance = balance
-        self.num_users = df["user_id"].nunique()
-        self.num_items = df["item_id"].nunique()
-        self.global_mean = df["rating"].mean()
+        self.num_users = df[user_col].nunique()
+        self.num_items = df[item_col].nunique()
+        self.global_mean = df[target].mean()
         self.test_size = test_size
         self.val_size = val_size
         self.num_features = len(df.columns)
-        self.min_rating = df["rating"].min()
-        self.max_rating = df["rating"].max()
+        self.min_rating = df[target].min()
+        self.max_rating = df[target].max()
         self.sparsity = 1 - len(df) / (self.num_users * self.num_items)
         self.target = target
+        self.user_col = user_col
+        self.item_col = item_col
 
         self.encoders = {}
         self.scalers = {}
         self.cat_cardinalities = {}
-        self.numeric_features = []
+        self.cont_features = []
 
         self._prepare_scalers()
 
@@ -63,13 +67,13 @@ class ELearningDataModule(L.LightningDataModule):
             self.train_df = self._balance_dataset(self.train_df)
 
     def _prepare_scalers(self):
-        self.df["user_id"] = LabelEncoder().fit_transform(self.df["user_id"])
-        self.df["item_id"] = LabelEncoder().fit_transform(self.df["item_id"])
+        self.df[self.user_col] = LabelEncoder().fit_transform(self.df[self.user_col])
+        self.df[self.item_col] = LabelEncoder().fit_transform(self.df[self.item_col])
 
         self.train_df, self.val_df, self.test_df = self._split_data()
 
         for col in self.train_df.columns:
-            if col == self.target or col in ["user_id", "item_id"]:
+            if col == self.target or col in [self.user_col, self.item_col]:
                 continue
 
             if isinstance(self.train_df[col].dtype, pd.CategoricalDtype):
@@ -77,10 +81,10 @@ class ELearningDataModule(L.LightningDataModule):
                 self.cat_cardinalities[col] = self.train_df[col].nunique()
             else:
                 self.scalers[col] = MinMaxScaler().fit(self.train_df[[col]])
-                self.numeric_features.append(col)
+                self.cont_features.append(col)
 
         self.num_cat_features = len(self.cat_cardinalities)
-        self.num_num_features = len(self.numeric_features)
+        self.num_cont_features = len(self.cont_features)
 
     def _split_data(self) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
         if self.test_size == 0:
@@ -99,8 +103,8 @@ class ELearningDataModule(L.LightningDataModule):
         return train_df, val_df, test_df
 
     def _balance_dataset(self, df: pd.DataFrame) -> pd.DataFrame:
-        df_eq_10 = df[df["rating"] == 10]
-        df_not_eq_10 = df[df["rating"] != 10]
+        df_eq_10 = df[df[self.target] == 10]
+        df_not_eq_10 = df[df[self.target] != 10]
 
         min_count = min(len(df_eq_10), len(df_not_eq_10))
 

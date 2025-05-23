@@ -20,11 +20,12 @@ class UcoRecSys(L.LightningModule):
         lr: float = 1e-3,
         weight_decay: float = 1e-6,
         k: int = 10,
+        loss_fn: nn.Module = None,
     ):
         super().__init__()
         self.save_hyperparameters(ignore=["model"])
         self.model = model
-        self.loss_fn = nn.MSELoss()
+        self.loss_fn = nn.MSELoss() if loss_fn is None else loss_fn
         self.threshold = threshold
         self.lr = lr
         self.weight_decay = weight_decay

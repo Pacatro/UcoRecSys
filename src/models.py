@@ -81,6 +81,4 @@ class NeuralHybrid(nn.Module):
         x = torch.cat([u_emb, i_emb, cat_embs, num_embs], dim=1)
         raw = self.mlp(x).squeeze(1) + u_b + i_b
 
-        return (
-            torch.sigmoid(raw) * (self.max_rating - self.min_rating) + self.min_rating
-        )
+        return torch.clamp(input=raw, min=self.min_rating, max=self.max_rating)

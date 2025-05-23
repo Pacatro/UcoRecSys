@@ -13,6 +13,7 @@ dependencies = [
   "matplotlib>=3.10.1",
   "torchmetrics>=1.7.1",
   "lightning>=2.5.1.post0",
+  "openpyxl>=3.1.5",
 ]
 
 [dependency-groups]
