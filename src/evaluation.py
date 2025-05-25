@@ -16,6 +16,7 @@ def cross_validate(
     epochs: int = 100,
     cv_type: Literal["kfold", "loo"] = "kfold",
     callbacks: list[L.Callback] = [],
+    fast_dev_run: bool = False,
 ) -> pd.DataFrame:
     cv = (
         KFold(n_splits=n_splits, random_state=random_state, shuffle=True)
@@ -56,14 +57,16 @@ def cross_validate(
             log_every_n_steps=10,
             enable_model_summary=False,
             inference_mode=False,
-            enable_progress_bar=False,
+            enable_progress_bar=True,
+            fast_dev_run=fast_dev_run,
         )
 
         trainer.fit(recsys, datamodule=dm)
-        recsys = UcoRecSys.load_from_checkpoint(
-            trainer.checkpoint_callback.best_model_path,
-            model=model,
-        )
+        if not fast_dev_run:
+            recsys = UcoRecSys.load_from_checkpoint(
+                trainer.checkpoint_callback.best_model_path,
+                model=model,
+            )
         metrics = trainer.validate(recsys, datamodule=dm)
         print(metrics[0])
         fold_metrics.append(metrics[0])

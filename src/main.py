@@ -83,6 +83,8 @@ def load_itm(features: list[str], target: str) -> pd.DataFrame:
     ratings_df = ratings_df.rename(
         columns={"UserID": "user_id", "Item": "item_id", "Rating": "rating"}
     )
+    ratings_df["Class"] = ratings_df["Class"].astype("category")
+    ratings_df["Semester"] = ratings_df["Semester"].astype("category")
     return ratings_df[features + [target]]
 
 
@@ -100,10 +102,14 @@ def load_data(
 
 def inference(df: pd.DataFrame):
     dm = ELearningDataModule(
-        df, target=config.TARGET, batch_size=config.BATCH_SIZE, balance=config.BALANCE
+        df,
+        target=config.TARGET,
+        batch_size=config.BATCH_SIZE,
+        balance=config.BALANCE,
     )
 
     print(f"Dataset sparsity: {dm.sparsity}")
+    print(f"Dataset threshold: {dm.threshold}")
 
     dm.setup("fit")
     print(dm.train_dataset.df.shape, dm.val_dataset.df.shape)
@@ -182,6 +188,7 @@ def eval_model(df: pd.DataFrame, cv_type: Literal["kfold", "loo"] = "kfold"):
         epochs=config.EPOCHS,
         callbacks=[checkpoint, early_stop],
         cv_type=cv_type,
+        fast_dev_run=config.FAST_DEV_RUN,
     )
 
     if avg_metrics is not None:
@@ -244,7 +251,7 @@ def main():
         action="store",
         help="Evaluate the proposed model, if -s is activate, then performs the type of evaluation for surprise algorithms",
         choices=["kfold", "loo"],
-        default="kfold",
+        # default="kfold",
     )
     model_parser.add_argument(
         "-s",

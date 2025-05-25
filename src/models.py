@@ -36,7 +36,7 @@ class NeuralHybrid(nn.Module):
         # MLP
         n_cat = len(self.cat_embeddings)
         n_num = len(cont_features)
-        mlp_input = 2 * emb_dim + n_cat * (emb_dim // 2) + n_num
+        mlp_input = emb_dim + n_cat * (emb_dim // 2) + n_num
         layers = []
         for h in hidden_dims:
             layers += [
@@ -62,6 +62,8 @@ class NeuralHybrid(nn.Module):
         u_emb = self.user_embedding(u)
         i_emb = self.item_embedding(i)
 
+        i_ui = u_emb * i_emb
+
         cat_vecs = [emb(batch[key].long()) for key, emb in self.cat_embeddings.items()]
         cat_embs = (
             torch.cat(cat_vecs, dim=1)
@@ -78,7 +80,7 @@ class NeuralHybrid(nn.Module):
 
         u_b = self.user_bias(u).squeeze(1)
         i_b = self.item_bias(i).squeeze(1)
-        x = torch.cat([u_emb, i_emb, cat_embs, num_embs], dim=1)
+        x = torch.cat([i_ui, cat_embs, num_embs], dim=1)
         raw = self.mlp(x).squeeze(1) + u_b + i_b
 
         return torch.clamp(input=raw, min=self.min_rating, max=self.max_rating)

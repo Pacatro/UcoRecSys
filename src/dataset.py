@@ -29,19 +29,20 @@ class ELearningDataModule(L.LightningDataModule):
         self,
         df: pd.DataFrame,
         batch_size: int = 32,
-        threshold: float = 7.5,
-        balance: bool = False,
         test_size: float = 0.2,
         val_size: float = 0.1,
-        target: str = "rating",
         user_col: str = "user_id",
         item_col: str = "item_id",
+        target: str = "rating",
+        balance: bool = False,
+        threshold: float = None,
+        preprocess: bool = True,
     ):
         super().__init__()
         self.df = df.copy()
         self.target = target
         self.batch_size = batch_size
-        self.threshold = threshold
+        self.threshold = threshold if threshold is not None else self.df[target].mean()
         self.balance = balance
         self.num_users = df[user_col].nunique()
         self.num_items = df[item_col].nunique()
@@ -55,11 +56,7 @@ class ELearningDataModule(L.LightningDataModule):
         self.target = target
         self.user_col = user_col
         self.item_col = item_col
-
-        self.encoders = {}
-        self.scalers = {}
-        self.cat_cardinalities = {}
-        self.cont_features = []
+        self.preprocess = preprocess
 
         self._prepare_scalers()
 
@@ -67,21 +64,27 @@ class ELearningDataModule(L.LightningDataModule):
             self.train_df = self._balance_dataset(self.train_df)
 
     def _prepare_scalers(self):
+        self.encoders = {}
+        self.scalers = {}
+        self.cat_cardinalities = {}
+        self.cont_features = []
+
         self.df[self.user_col] = LabelEncoder().fit_transform(self.df[self.user_col])
         self.df[self.item_col] = LabelEncoder().fit_transform(self.df[self.item_col])
 
         self.train_df, self.val_df, self.test_df = self._split_data()
 
-        for col in self.train_df.columns:
-            if col == self.target or col in [self.user_col, self.item_col]:
-                continue
+        if self.preprocess:
+            for col in self.train_df.columns:
+                if col == self.target or col in [self.user_col, self.item_col]:
+                    continue
 
-            if isinstance(self.train_df[col].dtype, pd.CategoricalDtype):
-                self.encoders[col] = LabelEncoder().fit(self.train_df[col])
-                self.cat_cardinalities[col] = self.train_df[col].nunique()
-            else:
-                self.scalers[col] = MinMaxScaler().fit(self.train_df[[col]])
-                self.cont_features.append(col)
+                if isinstance(self.train_df[col].dtype, pd.CategoricalDtype):
+                    self.encoders[col] = LabelEncoder().fit(self.train_df[col])
+                    self.cat_cardinalities[col] = self.train_df[col].nunique()
+                else:
+                    self.scalers[col] = MinMaxScaler().fit(self.train_df[[col]])
+                    self.cont_features.append(col)
 
         self.num_cat_features = len(self.cat_cardinalities)
         self.num_cont_features = len(self.cont_features)
