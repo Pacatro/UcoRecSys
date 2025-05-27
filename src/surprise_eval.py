@@ -66,7 +66,6 @@ def cross_validation(
     algo_class: Callable[..., AlgoBase],
     data: Dataset,
     n_splits: int = 5,
-    epochs: int = 50,
     k: int = 10,
     threshold: float = 8.0,
     verbose: bool = False,
@@ -82,7 +81,7 @@ def cross_validation(
     fold_metrics = []
     for fold, (trainset, testset) in enumerate(cv.split(data), start=1):
         print(f"Fold {fold}/{n_folds}")
-        algo = algo_class(n_epochs=epochs)
+        algo = algo_class()
         algo.fit(trainset)
         preds = algo.test(testset)
         metrics = calc_metrics(preds, k=k, threshold=threshold)

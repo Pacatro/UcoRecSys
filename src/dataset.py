@@ -29,7 +29,7 @@ class ELearningDataModule(L.LightningDataModule):
         self,
         df: pd.DataFrame,
         batch_size: int = 32,
-        test_size: float = 0.2,
+        test_size: float = 0.4,
         val_size: float = 0.1,
         user_col: str = "user_id",
         item_col: str = "item_id",
@@ -58,12 +58,12 @@ class ELearningDataModule(L.LightningDataModule):
         self.item_col = item_col
         self.preprocess = preprocess
 
-        self._prepare_scalers()
+        self._preprocess()
 
         if balance:
             self.train_df = self._balance_dataset(self.train_df)
 
-    def _prepare_scalers(self):
+    def _preprocess(self):
         self.encoders = {}
         self.scalers = {}
         self.cat_cardinalities = {}
@@ -72,20 +72,19 @@ class ELearningDataModule(L.LightningDataModule):
         self.df[self.user_col] = LabelEncoder().fit_transform(self.df[self.user_col])
         self.df[self.item_col] = LabelEncoder().fit_transform(self.df[self.item_col])
 
-        self.train_df, self.val_df, self.test_df = self._split_data()
-
         if self.preprocess:
-            for col in self.train_df.columns:
+            for col in self.df.columns:
                 if col == self.target or col in [self.user_col, self.item_col]:
                     continue
 
-                if isinstance(self.train_df[col].dtype, pd.CategoricalDtype):
-                    self.encoders[col] = LabelEncoder().fit(self.train_df[col])
-                    self.cat_cardinalities[col] = self.train_df[col].nunique()
+                if isinstance(self.df[col].dtype, pd.CategoricalDtype):
+                    self.encoders[col] = LabelEncoder().fit(self.df[col])
+                    self.cat_cardinalities[col] = self.df[col].nunique()
                 else:
-                    self.scalers[col] = MinMaxScaler().fit(self.train_df[[col]])
+                    self.scalers[col] = MinMaxScaler().fit(self.df[[col]])
                     self.cont_features.append(col)
 
+        self.train_df, self.val_df, self.test_df = self._split_data()
         self.num_cat_features = len(self.cat_cardinalities)
         self.num_cont_features = len(self.cont_features)
 
@@ -152,8 +151,7 @@ class ELearningDataModule(L.LightningDataModule):
             self.test_dataset,
             batch_size=self.batch_size,
             num_workers=num_workers,
-            shuffle=True,
         )
 
     def predict_dataloader(self):
-        return DataLoader(self.test_dataset, batch_size=self.batch_size, shuffle=True)
+        return DataLoader(self.test_dataset, batch_size=self.batch_size)

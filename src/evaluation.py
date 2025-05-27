@@ -1,4 +1,3 @@
-from lightning.pytorch.loggers import TensorBoardLogger
 import pandas as pd
 import lightning as L
 from sklearn.model_selection import KFold, LeaveOneOut
@@ -16,7 +15,8 @@ def cross_validate(
     epochs: int = 100,
     cv_type: Literal["kfold", "loo"] = "kfold",
     callbacks: list[L.Callback] = [],
-    fast_dev_run: bool = False,
+    k: int = 10,
+    batch_size: int = 128,
 ) -> pd.DataFrame:
     cv = (
         KFold(n_splits=n_splits, random_state=random_state, shuffle=True)
@@ -34,6 +34,7 @@ def cross_validate(
 
         dm = ELearningDataModule(
             df=pd.concat([train_df, val_df], ignore_index=True),
+            batch_size=batch_size,
             test_size=0,
             val_size=len(val_df) / (len(train_df) + len(val_df)),
         )
@@ -46,10 +47,9 @@ def cross_validate(
             n_items=dm.num_items,
         )
 
-        recsys = UcoRecSys(model=model)
+        recsys = UcoRecSys(model=model, threshold=dm.threshold)
 
         trainer = L.Trainer(
-            logger=TensorBoardLogger(name="ucorecsys", save_dir="lightning_logs"),
             max_epochs=epochs,
             accelerator="auto",
             devices="auto",
@@ -58,15 +58,17 @@ def cross_validate(
             enable_model_summary=False,
             inference_mode=False,
             enable_progress_bar=True,
-            fast_dev_run=fast_dev_run,
         )
 
         trainer.fit(recsys, datamodule=dm)
-        if not fast_dev_run:
-            recsys = UcoRecSys.load_from_checkpoint(
-                trainer.checkpoint_callback.best_model_path,
-                model=model,
-            )
+
+        recsys = UcoRecSys.load_from_checkpoint(
+            trainer.checkpoint_callback.best_model_path,
+            model=model,
+            k=k,
+            threshold=dm.threshold,
+        )
+
         metrics = trainer.validate(recsys, datamodule=dm)
         print(metrics[0])
         fold_metrics.append(metrics[0])

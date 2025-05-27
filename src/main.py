@@ -1,12 +1,10 @@
 import pandas as pd
-import json
+import numpy as np
 from pathlib import Path
-from argparse import ArgumentParser
 import lightning as L
 from lightning.pytorch.loggers import TensorBoardLogger
 from lightning.pytorch.callbacks import EarlyStopping, ModelCheckpoint
 from typing import Literal
-from sklearn.impute import SimpleImputer
 from surprise import (
     Reader,
     Dataset,
@@ -24,15 +22,16 @@ from surprise import (
 )
 
 import db
+import config
 from evaluation import cross_validate
 from surprise_eval import cross_validation, preprocess_ratings
-import config
 from dataset import ELearningDataModule
 from engine import UcoRecSys
 from models import NeuralHybrid
+from args_parser import model_parser
 
 
-def load_mars(features: list[str], target: str) -> pd.DataFrame:
+def load_mars() -> pd.DataFrame:
     explicit_df_en = pd.read_csv("./data/mars_dataset/explicit_ratings_en.csv")
     explicit_df_fr = pd.read_csv("./data/mars_dataset/explicit_ratings_fr.csv")
 
@@ -55,64 +54,112 @@ def load_mars(features: list[str], target: str) -> pd.DataFrame:
         inplace=True,
     )
 
-    return df[features + [target]]
+    features = [
+        "user_id",
+        "item_id",
+        "item_type",
+        "difficulty",
+        "nb_views",
+        "watch_percentage",
+        "rating",
+    ]
+
+    return df[features]
 
 
-def load_doris(features: list[str], target: str) -> pd.DataFrame:
-    course_info = pd.read_excel("./data/doris_dataset/CourseInformationTable.xlsx")
-    course_selection = pd.read_excel("./data/doris_dataset/CourseSelectionTable.xlsx")
-    student_info = pd.read_excel("./data/doris_dataset/StudentInformationTable.xlsx")
-
-    # Rename columns
-    course_info = course_info.rename(columns={"CourseId": "item_id"})
-    student_info = student_info.rename(columns={"StudentId": "user_id"})
-    course_selection = course_selection.rename(
-        columns={"StudedntId": "user_id", "Score": "rating", "CourseId": "item_id"}
-    )
-
-    merged_df = pd.merge(course_selection, student_info, on="user_id", how="left")
-    df = pd.merge(merged_df, course_info, on="item_id", how="left")
-
-    imp = SimpleImputer(strategy="mean")
-    df[target] = imp.fit_transform(df[target].values.reshape(-1, 1))
-    return df[features + [target]]
-
-
-def load_itm(features: list[str], target: str) -> pd.DataFrame:
+def load_itm() -> pd.DataFrame:
     ratings_df = pd.read_csv("./data/itm_dataset/ratings.csv")
     ratings_df = ratings_df.rename(
         columns={"UserID": "user_id", "Item": "item_id", "Rating": "rating"}
     )
     ratings_df["Class"] = ratings_df["Class"].astype("category")
     ratings_df["Semester"] = ratings_df["Semester"].astype("category")
-    return ratings_df[features + [target]]
+
+    features = [
+        "user_id",
+        "item_id",
+        "Semester",
+        "Class",
+        "App",
+        "rating",
+    ]
+
+    return ratings_df[features]
 
 
-def load_data(
-    dataset_name: Literal["mars", "doris", "itm"], features: list[str], target: str
-) -> pd.DataFrame:
-    match dataset_name:
-        case "mars":
-            return load_mars(features, target)
-        case "doris":
-            return load_doris(features, target)
-        case "itm":
-            return load_itm(features, target)
-
-
-def inference(df: pd.DataFrame):
-    dm = ELearningDataModule(
-        df,
-        target=config.TARGET,
-        batch_size=config.BATCH_SIZE,
-        balance=config.BALANCE,
+def load_coursera() -> pd.DataFrame:
+    df = pd.read_csv("./data/coursera_dataset/Coursera.csv")
+    num_users = 1000
+    num_interactions = 10000
+    user_ids = np.random.randint(1, num_users + 1, size=num_interactions)
+    course_titles = np.random.choice(df["Course Name"], size=num_interactions)
+    interaction_types = np.random.choice(
+        ["view", "enroll", "complete", "rate"],
+        size=num_interactions,
+        p=[0.4, 0.3, 0.2, 0.1],
     )
 
-    print(f"Dataset sparsity: {dm.sparsity}")
-    print(f"Dataset threshold: {dm.threshold}")
+    # Asegurar que todos tengan un rating (aunque no sea realista para algunas interacciones)
+    ratings = np.random.uniform(1, 5, size=num_interactions)
+
+    interactions = pd.DataFrame(
+        {
+            "user_id": user_ids,
+            "Course Name": course_titles,
+            "interaction_type": interaction_types,
+            "rating": ratings,
+        }
+    )
+
+    df_merged = interactions.merge(df, on="Course Name", how="left", indicator=True)
+    df_merged = df_merged[df_merged["_merge"] == "both"].drop(columns=["_merge"])
+
+    df_merged = df_merged.rename(columns={"Course Name": "item_id"})
+    df_merged["item_id"] = df_merged["item_id"].astype("category")
+    df_merged["user_id"] = df_merged["user_id"].astype("category")
+    df_merged["Difficulty Level"] = df_merged["Difficulty Level"].astype("category")
+    df_merged["University"] = df_merged["University"].astype("category")
+    df_merged["Course Description"] = df_merged["Course Description"].astype("category")
+
+    features = [
+        "user_id",
+        "item_id",
+        "Difficulty Level",
+        "University",
+        "Course Description",
+        "rating",
+    ]
+
+    return df_merged[features]
+
+
+def load_data(dataset_name: Literal["mars", "itm", "coursera"]) -> pd.DataFrame:
+    match dataset_name:
+        case "mars":
+            return load_mars()
+        case "itm":
+            return load_itm()
+        case "coursera":
+            return load_coursera()
+
+
+def inference(
+    df: pd.DataFrame,
+    dataset_name: str,
+    target: str,
+    batch_size: int,
+    balance: bool,
+    k: int = 10,
+    verbose: bool = True,
+):
+    dm = ELearningDataModule(
+        df,
+        target=target,
+        batch_size=batch_size,
+        balance=balance,
+    )
 
     dm.setup("fit")
-    print(dm.train_dataset.df.shape, dm.val_dataset.df.shape)
 
     model = NeuralHybrid(
         n_users=dm.num_users,
@@ -121,12 +168,16 @@ def inference(df: pd.DataFrame):
         cat_cardinalities=dm.cat_cardinalities,
     )
 
-    print(model)
+    if verbose:
+        print(f"Dataset sparsity: {dm.sparsity}")
+        print(f"Dataset threshold: {dm.threshold}")
+        print(dm.train_dataset.df)
+        print(model)
 
     recsys = UcoRecSys(
         model=model,
-        k=config.K,
-        threshold=config.THRESHOLD,
+        k=k,
+        threshold=dm.threshold,
     )
 
     early_stop = EarlyStopping(
@@ -153,21 +204,25 @@ def inference(df: pd.DataFrame):
 
     trainer.fit(recsys, datamodule=dm)
 
-    if not config.FAST_DEV_RUN:
-        recsys = UcoRecSys.load_from_checkpoint(
-            trainer.checkpoint_callback.best_model_path,
-            model=model,
-            k=config.K,
-            threshold=config.THRESHOLD,
-        )
+    recsys = UcoRecSys.load_from_checkpoint(
+        trainer.checkpoint_callback.best_model_path,
+        model=model,
+        k=k,
+        threshold=dm.threshold,
+    )
 
     dm.setup("test")
-    test_metrics = trainer.test(model=recsys, datamodule=dm)[0]
-    with open("inference_results.json", "w") as f:
-        json.dump(test_metrics, f, indent=2)
+    test_metrics = trainer.test(model=recsys, datamodule=dm)
+    pd.DataFrame(test_metrics).to_csv(f"inference_{dataset_name}_results_k={k}.csv")
 
 
-def eval_model(df: pd.DataFrame, cv_type: Literal["kfold", "loo"] = "kfold"):
+def eval_model(
+    df: pd.DataFrame,
+    batch_size: int,
+    dataset: str,
+    k: int,
+    cv_type: Literal["kfold", "loo"] = "kfold",
+):
     early_stop = EarlyStopping(
         monitor="val/loss",
         patience=config.PATIENCE,
@@ -188,22 +243,25 @@ def eval_model(df: pd.DataFrame, cv_type: Literal["kfold", "loo"] = "kfold"):
         epochs=config.EPOCHS,
         callbacks=[checkpoint, early_stop],
         cv_type=cv_type,
-        fast_dev_run=config.FAST_DEV_RUN,
+        batch_size=batch_size,
+        k=k,
     )
 
     if avg_metrics is not None:
-        with open(f"{cv_type}_eval_results.json", "w") as f:
-            json.dump(avg_metrics.to_dict(), f, indent=2)
+        avg_metrics.to_csv(f"{cv_type}_eval_{dataset}_results_k={k}.csv")
 
 
 def surprise_eval(
     df: pd.DataFrame,
+    k: int,
+    target: str = "rating",
     min_rating: int = 1,
     max_rating: int = 10,
     cv_type: Literal["kfold", "loo"] = "kfold",
 ):
     reader = Reader(rating_scale=(min_rating, max_rating))
     df = preprocess_ratings(df)
+    print(df.head())
     data = Dataset.load_from_df(df, reader)
 
     algos = [
@@ -226,73 +284,52 @@ def surprise_eval(
             algo_class=algo,
             data=data,
             n_splits=5,
-            k=config.K,
+            k=k,
             cv_type=cv_type,
-            epochs=config.EPOCHS,
+            threshold=df[target].mean(),
         )
         algos_metrics[algo.__name__] = results
 
-    with open("surprise_metrics.json", "w") as f:
-        json.dump(algos_metrics, f, indent=2)
+    pd.DataFrame(algos_metrics).to_csv(f"surprise_{cv_type}_metrics_k={k}.csv")
 
 
 def main():
     if not Path(db.DB_FILE_PATH).exists():
         db.csv_to_sql(verbose=True)
 
-    model_parser = ArgumentParser(prog="ucorecsys")
-
-    model_parser.add_argument(
-        "-i", "--inference", action="store_true", help="Run inference"
-    )
-    model_parser.add_argument(
-        "-e",
-        "--eval",
-        action="store",
-        help="Evaluate the proposed model, if -s is activate, then performs the type of evaluation for surprise algorithms",
-        choices=["kfold", "loo"],
-        # default="kfold",
-    )
-    model_parser.add_argument(
-        "-s",
-        "--surprise",
-        action="store_true",
-        help="Evaluate the surprise algorithms",
-    )
-    model_parser.add_argument(
-        "-ds",
-        "--dataset",
-        action="store",
-        help="Name of the dataset to load",
-        choices=["mars", "doris", "itm"],
-        default="mars",
-    )
-
     args = model_parser.parse_args()
 
     print(f"Using batch size of {config.BATCH_SIZE}")
     print(f"Using {args.dataset} dataset")
-    print(f"Using {len(config.FEATURES)} features: {config.FEATURES}")
     print(f"Balance: {config.BALANCE}")
     print(f"k = {config.K}")
     print(f"Patience = {config.PATIENCE}, delta = {config.DELTA}")
-    print(f"Threshold = {config.THRESHOLD}")
     print(f"Epochs = {config.EPOCHS}\n")
 
-    df = load_data(args.dataset, features=config.FEATURES, target=config.TARGET)
+    df = load_data(args.dataset)
+    batch_size = config.BATCH_SIZE if args.dataset == "mars" else 32
 
     if args.inference:
-        inference(df)
+        inference(
+            df,
+            target=config.TARGET,
+            dataset_name=args.dataset,
+            batch_size=batch_size,
+            balance=config.BALANCE,
+            k=config.K,
+            verbose=args.verbose,
+        )
     elif args.surprise:
         surprise_eval(
             df,
             cv_type=args.eval,
             min_rating=df[config.TARGET].min(),
             max_rating=df[config.TARGET].max(),
+            k=config.K,
         )
     elif args.eval:
         print("Eval mode:", args.eval)
-        eval_model(df, args.eval)
+        eval_model(df, batch_size, args.dataset, config.K, args.eval)
     else:
         print(df)
 
