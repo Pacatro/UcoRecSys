@@ -81,6 +81,7 @@ def load_itm() -> pd.DataFrame:
         "Semester",
         "Class",
         "App",
+        "Ease",
         "rating",
     ]
 
@@ -220,29 +221,20 @@ def eval_model(
     dataset: str,
     k: int,
     cv_type: Literal["kfold", "loo"] = "kfold",
+    verbose: bool = False,
 ):
-    early_stop = EarlyStopping(
-        monitor="val/loss",
-        patience=config.PATIENCE,
-        mode="min",
-        min_delta=config.DELTA,
-        verbose=False,
-    )
-
-    checkpoint = ModelCheckpoint(
-        monitor="val/loss", mode="min", save_top_k=1, filename="best-model"
-    )
-
     avg_metrics = cross_validate(
         df=df,
         model_class=NeuralHybrid,
         n_splits=5,
         random_state=42,
         epochs=config.EPOCHS,
-        callbacks=[checkpoint, early_stop],
         cv_type=cv_type,
         batch_size=batch_size,
         k=k,
+        patience=config.PATIENCE,
+        delta=config.DELTA,
+        verbose=verbose,
     )
 
     if avg_metrics is not None:
@@ -315,7 +307,13 @@ def main():
             k=config.K,
             verbose=args.verbose,
         )
-    elif args.surprise:
+    elif args.eval:
+        print("Eval mode:", args.eval)
+        eval_model(df, batch_size, args.dataset, config.K, args.eval, args.verbose)
+    else:
+        print(df)
+
+    if args.surprise:
         surprise_eval(
             df,
             cv_type=args.eval,
@@ -323,11 +321,6 @@ def main():
             max_rating=df[config.TARGET].max(),
             k=config.K,
         )
-    elif args.eval:
-        print("Eval mode:", args.eval)
-        eval_model(df, batch_size, args.dataset, config.K, args.eval)
-    else:
-        print(df)
 
 
 if __name__ == "__main__":

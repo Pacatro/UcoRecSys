@@ -31,5 +31,4 @@ model_parser.add_argument(
     "--verbose",
     action="store_true",
     help="Prints additional information",
-    default=True,
 )

@@ -2,6 +2,7 @@ import pandas as pd
 import lightning as L
 from sklearn.model_selection import KFold, LeaveOneOut
 from typing import Literal
+from lightning.pytorch.callbacks import EarlyStopping, ModelCheckpoint
 
 from dataset import ELearningDataModule
 from engine import UcoRecSys
@@ -17,6 +18,9 @@ def cross_validate(
     callbacks: list[L.Callback] = [],
     k: int = 10,
     batch_size: int = 128,
+    patience: int = 5,
+    delta: float = 0.001,
+    verbose: bool = False,
 ) -> pd.DataFrame:
     cv = (
         KFold(n_splits=n_splits, random_state=random_state, shuffle=True)
@@ -49,6 +53,19 @@ def cross_validate(
 
         recsys = UcoRecSys(model=model, threshold=dm.threshold)
 
+        callbacks = [
+            EarlyStopping(
+                monitor="val/loss",
+                patience=patience,
+                mode="min",
+                min_delta=delta,
+                verbose=False,
+            ),
+            ModelCheckpoint(
+                monitor="val/loss", mode="min", save_top_k=1, filename="best-model"
+            ),
+        ]
+
         trainer = L.Trainer(
             max_epochs=epochs,
             accelerator="auto",
@@ -57,7 +74,7 @@ def cross_validate(
             log_every_n_steps=10,
             enable_model_summary=False,
             inference_mode=False,
-            enable_progress_bar=True,
+            enable_progress_bar=verbose,
         )
 
         trainer.fit(recsys, datamodule=dm)
