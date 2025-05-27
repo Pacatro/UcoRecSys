@@ -119,14 +119,12 @@ def load_coursera() -> pd.DataFrame:
     df_merged["user_id"] = df_merged["user_id"].astype("category")
     df_merged["Difficulty Level"] = df_merged["Difficulty Level"].astype("category")
     df_merged["University"] = df_merged["University"].astype("category")
-    df_merged["Course Description"] = df_merged["Course Description"].astype("category")
 
     features = [
         "user_id",
         "item_id",
         "Difficulty Level",
         "University",
-        "Course Description",
         "rating",
     ]
 
@@ -150,7 +148,7 @@ def inference(
     batch_size: int,
     balance: bool,
     k: int = 10,
-    verbose: bool = True,
+    verbose: bool = False,
 ):
     dm = ELearningDataModule(
         df,
@@ -299,15 +297,13 @@ def main():
 
     args = model_parser.parse_args()
 
-    print(f"Using batch size of {config.BATCH_SIZE}")
     print(f"Using {args.dataset} dataset")
     print(f"Balance: {config.BALANCE}")
-    print(f"k = {config.K}")
     print(f"Patience = {config.PATIENCE}, delta = {config.DELTA}")
-    print(f"Epochs = {config.EPOCHS}\n")
 
     df = load_data(args.dataset)
     batch_size = config.BATCH_SIZE if args.dataset == "mars" else 32
+    print(f"Batch size: {batch_size}")
 
     if args.inference:
         inference(
