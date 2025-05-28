@@ -70,29 +70,35 @@ def load_mars() -> pd.DataFrame:
 
 def load_itm() -> pd.DataFrame:
     ratings_df = pd.read_csv("./data/itm_dataset/ratings.csv")
-    ratings_df = ratings_df.rename(
+    items_df = pd.read_csv("./data/itm_dataset/items.csv")
+    merged_df = pd.merge(left=items_df, right=ratings_df, how="inner", on="Item")
+    merged_df = merged_df.rename(
         columns={"UserID": "user_id", "Item": "item_id", "Rating": "rating"}
     )
-    ratings_df["Class"] = ratings_df["Class"].astype("category")
-    ratings_df["Semester"] = ratings_df["Semester"].astype("category")
+    merged_df["Class"] = merged_df["Class"].astype("category")
+    merged_df["Semester"] = merged_df["Semester"].astype("category")
+    merged_df["Lockdown"] = merged_df["Lockdown"].astype("category")
+    merged_df["Title"] = merged_df["Title"].astype("category")
 
     features = [
         "user_id",
         "item_id",
+        "Title",
         "Semester",
         "Class",
         "App",
+        "Lockdown",
         "Ease",
         "rating",
     ]
 
-    return ratings_df[features]
+    return merged_df[features]
 
 
 def load_coursera() -> pd.DataFrame:
     df = pd.read_csv("./data/coursera_dataset/Coursera.csv")
-    num_users = 1000
-    num_interactions = 10000
+    num_users = 2000
+    num_interactions = 20000
     user_ids = np.random.randint(1, num_users + 1, size=num_interactions)
     course_titles = np.random.choice(df["Course Name"], size=num_interactions)
     interaction_types = np.random.choice(
