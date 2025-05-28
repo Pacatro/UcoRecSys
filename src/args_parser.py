@@ -8,9 +8,16 @@ model_parser.add_argument(
 model_parser.add_argument(
     "-e",
     "--eval",
+    action="store_true",
+    help="Evaluate the proposed model",
+)
+model_parser.add_argument(
+    "-cv",
+    "--cvtype",
     action="store",
-    help="Evaluate the proposed model, if -s is activate, then performs the type of evaluation for surprise algorithms",
+    help="Type of cross-validation to use",
     choices=["kfold", "loo"],
+    default="kfold",
 )
 model_parser.add_argument(
     "-s",
@@ -23,7 +30,7 @@ model_parser.add_argument(
     "--dataset",
     action="store",
     help="Name of the dataset to load",
-    choices=["mars", "coursera", "itm"],
+    choices=["mars", "coursera", "itm", "doris"],
     default="mars",
 )
 model_parser.add_argument(

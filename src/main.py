@@ -5,6 +5,7 @@ import lightning as L
 from lightning.pytorch.loggers import TensorBoardLogger
 from lightning.pytorch.callbacks import EarlyStopping, ModelCheckpoint
 from typing import Literal
+from sklearn.preprocessing import MinMaxScaler
 from surprise import (
     Reader,
     Dataset,
@@ -132,7 +133,31 @@ def load_coursera() -> pd.DataFrame:
     return df_merged[features]
 
 
-def load_data(dataset_name: Literal["mars", "itm", "coursera"]) -> pd.DataFrame:
+def load_doris() -> pd.DataFrame:
+    course_info = pd.read_csv("./data/doris_dataset/CourseInformationTable.csv")
+    course_selection = pd.read_csv("./data/doris_dataset/CourseSelectionTable.csv")
+    merged_df = pd.merge(
+        left=course_info, right=course_selection, how="inner", on="CourseId"
+    )
+    merged_df.rename(
+        columns={"CourseId": "item_id", "StudentId": "user_id", "Score": "rating"},
+        inplace=True,
+    )
+    merged_df["rating"] = merged_df["rating"].fillna(0)
+    merged_df["rating"] = MinMaxScaler(feature_range=(0, 10)).fit_transform(
+        merged_df[["rating"]]
+    )
+    merged_df["Type"] = merged_df["Type"].fillna("Undefined").astype("category")
+    merged_df["CourseCollege"] = (
+        merged_df["CourseCollege"].fillna("Undefined").astype("category")
+    )
+    features = ["user_id", "item_id", "Type", "rating"]
+    return merged_df[features]
+
+
+def load_data(
+    dataset_name: Literal["mars", "itm", "coursera", "doris"],
+) -> pd.DataFrame:
     match dataset_name:
         case "mars":
             return load_mars()
@@ -140,6 +165,8 @@ def load_data(dataset_name: Literal["mars", "itm", "coursera"]) -> pd.DataFrame:
             return load_itm()
         case "coursera":
             return load_coursera()
+        case "doris":
+            return load_doris()
 
 
 def inference(
@@ -243,6 +270,7 @@ def eval_model(
 
 def surprise_eval(
     df: pd.DataFrame,
+    dataset: str,
     k: int,
     target: str = "rating",
     min_rating: int = 1,
@@ -251,8 +279,7 @@ def surprise_eval(
 ):
     reader = Reader(rating_scale=(min_rating, max_rating))
     df = preprocess_ratings(df)
-    print(df.head())
-    data = Dataset.load_from_df(df, reader)
+    data = Dataset.load_from_df(df[["user_id", "item_id", "rating"]], reader)
 
     algos = [
         SVDpp,
@@ -280,7 +307,9 @@ def surprise_eval(
         )
         algos_metrics[algo.__name__] = results
 
-    pd.DataFrame(algos_metrics).to_csv(f"surprise_{cv_type}_metrics_k={k}.csv")
+    pd.DataFrame(algos_metrics).to_csv(
+        f"surprise_{dataset}_{cv_type}_metrics_k={k}.csv"
+    )
 
 
 def main():
@@ -294,7 +323,7 @@ def main():
     print(f"Patience = {config.PATIENCE}, delta = {config.DELTA}")
 
     df = load_data(args.dataset)
-    batch_size = config.BATCH_SIZE if args.dataset == "mars" else 32
+    batch_size = config.BATCH_SIZE if args.dataset in ["mars", "doris"] else 32
     print(f"Batch size: {batch_size}")
 
     if args.inference:
@@ -308,15 +337,16 @@ def main():
             verbose=args.verbose,
         )
     elif args.eval:
-        print("Eval mode:", args.eval)
-        eval_model(df, batch_size, args.dataset, config.K, args.eval, args.verbose)
+        print("CV type:", args.cvtype)
+        eval_model(df, batch_size, args.dataset, config.K, args.cvtype, args.verbose)
     else:
         print(df)
 
     if args.surprise:
         surprise_eval(
             df,
-            cv_type=args.eval,
+            dataset=args.dataset,
+            cv_type=args.cvtype,
             min_rating=df[config.TARGET].min(),
             max_rating=df[config.TARGET].max(),
             k=config.K,

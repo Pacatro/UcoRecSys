@@ -27,9 +27,11 @@ def preprocess_ratings(df: pd.DataFrame) -> pd.DataFrame:
     """
     le_user = LabelEncoder()
     le_course = LabelEncoder()
+    df["user_id"] = df["user_id"].astype("category")
+    df["item_id"] = df["item_id"].astype("category")
 
-    df.loc[:, "user_id"] = le_user.fit_transform(df.user_id.values)
-    df.loc[:, "item_id"] = le_course.fit_transform(df.item_id.values)
+    df["user_id"] = le_user.fit_transform(df["user_id"])
+    df["item_id"] = le_course.fit_transform(df["item_id"])
     return df
 
 
@@ -68,9 +70,9 @@ def cross_validation(
     n_splits: int = 5,
     k: int = 10,
     threshold: float = 8.0,
-    verbose: bool = False,
-    cv_type: Literal["kfold", "loo"] = "kfold",
+    cv_type: Literal["kfold", "loo"] = None,
 ) -> dict[str, float]:
+    cv_type = cv_type if not None else "kfold"
     print(f"Running {algo_class.__name__} cross validation ({cv_type})")
     cv = (
         KFold(n_splits=n_splits, shuffle=True, random_state=42)
@@ -85,8 +87,6 @@ def cross_validation(
         algo.fit(trainset)
         preds = algo.test(testset)
         metrics = calc_metrics(preds, k=k, threshold=threshold)
-        if verbose:
-            print(metrics)
         fold_metrics.append(metrics)
 
     avg_metrics = pd.DataFrame(fold_metrics).mean()
