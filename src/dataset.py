@@ -7,7 +7,12 @@ import lightning as L
 
 
 class ELearningDataset(Dataset):
-    def __init__(self, df: pd.DataFrame, encoders: dict = None, scalers: dict = None):
+    def __init__(
+        self,
+        df: pd.DataFrame,
+        encoders: dict | None = None,
+        scalers: dict | None = None,
+    ):
         self.df = df.copy()
         if encoders:
             for col, encoder in encoders.items():
@@ -35,14 +40,14 @@ class ELearningDataModule(L.LightningDataModule):
         item_col: str = "item_id",
         target: str = "rating",
         balance: bool = False,
-        threshold: float = None,
+        threshold: float = 0,
         preprocess: bool = True,
     ):
         super().__init__()
         self.df = df.copy()
         self.target = target
         self.batch_size = batch_size
-        self.threshold = threshold if threshold is not None else self.df[target].mean()
+        self.threshold = threshold if threshold != 0 else self.df[target].mean()
         self.balance = balance
         self.num_users = df[user_col].nunique()
         self.num_items = df[item_col].nunique()
@@ -88,7 +93,7 @@ class ELearningDataModule(L.LightningDataModule):
         self.num_cat_features = len(self.cat_cardinalities)
         self.num_cont_features = len(self.cont_features)
 
-    def _split_data(self) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+    def _split_data(self) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame | None]:
         if self.test_size == 0:
             train_df, val_df = train_test_split(
                 self.df, test_size=self.val_size, shuffle=True
@@ -117,7 +122,7 @@ class ELearningDataModule(L.LightningDataModule):
 
         return df
 
-    def setup(self, stage: str = None):
+    def setup(self, stage: str | None = None):
         match stage:
             case "fit":
                 self.train_dataset = ELearningDataset(
@@ -127,9 +132,12 @@ class ELearningDataModule(L.LightningDataModule):
                     self.val_df, encoders=self.encoders, scalers=self.scalers
                 )
             case "test":
-                self.test_dataset = ELearningDataset(
-                    self.test_df, encoders=self.encoders, scalers=self.scalers
-                )
+                if self.test_df is not None:
+                    self.test_dataset = ELearningDataset(
+                        self.test_df, encoders=self.encoders, scalers=self.scalers
+                    )
+                else:
+                    self.test_dataset = None
 
     def train_dataloader(self, num_workers: int = 2):
         return DataLoader(
@@ -147,11 +155,19 @@ class ELearningDataModule(L.LightningDataModule):
         )
 
     def test_dataloader(self, num_workers: int = 2):
-        return DataLoader(
-            self.test_dataset,
-            batch_size=self.batch_size,
-            num_workers=num_workers,
+        return (
+            DataLoader(
+                self.test_dataset,
+                batch_size=self.batch_size,
+                num_workers=num_workers,
+            )
+            if self.test_dataset is not None
+            else None
         )
 
     def predict_dataloader(self):
-        return DataLoader(self.test_dataset, batch_size=self.batch_size)
+        return (
+            DataLoader(self.test_dataset, batch_size=self.batch_size)
+            if self.test_dataset is not None
+            else None
+        )

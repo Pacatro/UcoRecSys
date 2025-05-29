@@ -15,13 +15,12 @@ def cross_validate(
     random_state: int = 42,
     epochs: int = 100,
     cv_type: Literal["kfold", "loo"] = "kfold",
-    callbacks: list[L.Callback] = [],
     k: int = 10,
     batch_size: int = 128,
     patience: int = 5,
     delta: float = 0.001,
     verbose: bool = False,
-) -> pd.DataFrame:
+) -> pd.Series:
     cv = (
         KFold(n_splits=n_splits, random_state=random_state, shuffle=True)
         if cv_type == "kfold"
@@ -53,24 +52,22 @@ def cross_validate(
 
         recsys = UcoRecSys(model=model, threshold=dm.threshold)
 
-        callbacks = [
-            EarlyStopping(
-                monitor="val/loss",
-                patience=patience,
-                mode="min",
-                min_delta=delta,
-                verbose=False,
-            ),
-            ModelCheckpoint(
-                monitor="val/loss", mode="min", save_top_k=1, filename="best-model"
-            ),
-        ]
+        earlystop = EarlyStopping(
+            monitor="val/loss",
+            patience=patience,
+            mode="min",
+            min_delta=delta,
+            verbose=False,
+        )
+        ckpt = ModelCheckpoint(
+            monitor="val/loss", mode="min", save_top_k=1, filename="best-model"
+        )
 
         trainer = L.Trainer(
             max_epochs=epochs,
             accelerator="auto",
             devices="auto",
-            callbacks=callbacks,
+            callbacks=[earlystop, ckpt],
             log_every_n_steps=10,
             enable_model_summary=False,
             inference_mode=False,
@@ -80,7 +77,7 @@ def cross_validate(
         trainer.fit(recsys, datamodule=dm)
 
         recsys = UcoRecSys.load_from_checkpoint(
-            trainer.checkpoint_callback.best_model_path,
+            ckpt.best_model_path,
             model=model,
             k=k,
             threshold=dm.threshold,

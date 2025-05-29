@@ -237,7 +237,7 @@ def inference(
     trainer.fit(recsys, datamodule=dm)
 
     recsys = UcoRecSys.load_from_checkpoint(
-        trainer.checkpoint_callback.best_model_path,
+        checkpoint.best_model_path,
         model=model,
         k=k,
         threshold=dm.threshold,

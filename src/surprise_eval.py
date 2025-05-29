@@ -58,8 +58,8 @@ def calc_metrics(
     metrics.reset()
 
     return {
-        "rmse": rmse,
-        "mse": mse,
+        "rmse": float(rmse),
+        "mse": float(mse),
         **metrics_results,
     }
 
@@ -70,7 +70,7 @@ def cross_validation(
     n_splits: int = 5,
     k: int = 10,
     threshold: float = 8.0,
-    cv_type: Literal["kfold", "loo"] = None,
+    cv_type: Literal["kfold", "loo"] | None = None,
 ) -> dict[str, float]:
     cv_type = cv_type if not None else "kfold"
     print(f"Running {algo_class.__name__} cross validation ({cv_type})")
