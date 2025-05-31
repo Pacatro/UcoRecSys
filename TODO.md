@@ -8,7 +8,9 @@
 
 ## Memoria
 
-- [ ] Formulación del problema y objetivos.
+- [ ] Reescribir definiciones de métricas con una mejor notación.
+- [x] Formulación del problema y objetivos.
+- [ ] Resolver anotaciones de Amelia.
 - [ ] Metodología.
 - [ ] Desarrollo y experimentación.
 - [ ] Resultados y discusión.

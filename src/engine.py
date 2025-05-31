@@ -1,7 +1,7 @@
 import torch
 from torch import nn
 import lightning.pytorch as L
-from torchmetrics import MetricCollection
+from torchmetrics import MetricCollection, Metric
 from torchmetrics.retrieval import (
     RetrievalPrecision,
     RetrievalRecall,
@@ -10,6 +10,34 @@ from torchmetrics.retrieval import (
     RetrievalMAP,
     RetrievalMRR,
 )
+
+
+class RetrievalFBetaScore(Metric):
+    def __init__(
+        self, top_k: int = 10, beta: float = 1.0, adaptive_k: bool = True, **kwargs
+    ):
+        super().__init__(**kwargs)
+        self.beta = beta
+        self.top_k = top_k
+
+        self.precision = RetrievalPrecision(top_k=top_k, adaptive_k=adaptive_k)
+        self.recall = RetrievalRecall(top_k=top_k)
+
+    def update(self, preds: torch.Tensor, target: torch.Tensor, indexes: torch.Tensor):
+        self.precision.update(preds, target, indexes=indexes)
+        self.recall.update(preds, target, indexes=indexes)
+
+    def compute(self):
+        precision = self.precision.compute()
+        recall = self.recall.compute()
+
+        return ((1 + self.beta**2) * precision * recall) / (
+            (self.beta**2 * precision) + recall
+        )
+
+    def reset(self):
+        self.precision.reset()
+        self.recall.reset()
 
 
 class UcoRecSys(L.LightningModule):
@@ -31,12 +59,15 @@ class UcoRecSys(L.LightningModule):
         self.weight_decay = weight_decay
 
         metrics = MetricCollection(
-            RetrievalPrecision(top_k=k, adaptive_k=True),
-            RetrievalRecall(top_k=k),
-            RetrievalNormalizedDCG(top_k=k),
-            RetrievalHitRate(top_k=k),
-            RetrievalMAP(top_k=k),
-            RetrievalMRR(top_k=k),
+            {
+                f"Precison@{k}": RetrievalPrecision(top_k=k, adaptive_k=True),
+                f"Recall@{k}": RetrievalRecall(top_k=k),
+                f"F1@{k}": RetrievalFBetaScore(top_k=k, beta=1.0, adaptive_k=True),
+                f"NDCG@{k}": RetrievalNormalizedDCG(top_k=k),
+                f"HitRate@{k}": RetrievalHitRate(top_k=k),
+                f"MAP@{k}": RetrievalMAP(top_k=k),
+                f"MRR@{k}": RetrievalMRR(top_k=k),
+            }
         )
 
         self.test_metrics = metrics.clone(prefix="test/")
@@ -65,7 +96,7 @@ class UcoRecSys(L.LightningModule):
                 indexes=user_ids,
             )
 
-        self.log(f"{prefix}/loss", loss, prog_bar=True, on_step=False, on_epoch=True)
+        self.log(f"{prefix}/mse", loss, prog_bar=True, on_step=False, on_epoch=True)
         self.log(
             f"{prefix}/rmse",
             torch.sqrt(loss),
@@ -109,5 +140,5 @@ class UcoRecSys(L.LightningModule):
         )
         return {
             "optimizer": optimizer,
-            "lr_scheduler": {"scheduler": scheduler, "monitor": "val/loss"},
+            "lr_scheduler": {"scheduler": scheduler, "monitor": "val/mse"},
         }

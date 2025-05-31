@@ -213,7 +213,7 @@ def inference(
     )
 
     early_stop = EarlyStopping(
-        monitor="val/loss",
+        monitor="val/mse",
         patience=config.PATIENCE,
         mode="min",
         min_delta=config.DELTA,
@@ -221,7 +221,7 @@ def inference(
     )
 
     checkpoint = ModelCheckpoint(
-        monitor="val/loss", mode="min", save_top_k=1, filename="best-model"
+        monitor="val/mse", mode="min", save_top_k=1, filename="best-model"
     )
 
     trainer = L.Trainer(

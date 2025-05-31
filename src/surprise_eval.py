@@ -19,6 +19,8 @@ from surprise import (
     Prediction,
 )
 
+from engine import RetrievalFBetaScore
+
 
 def preprocess_ratings(df: pd.DataFrame) -> pd.DataFrame:
     """
@@ -43,12 +45,15 @@ def calc_metrics(
     target = torch.tensor([pred.r_ui >= threshold for pred in preds])
 
     metrics = MetricCollection(
-        RetrievalPrecision(top_k=k, adaptive_k=True),
-        RetrievalRecall(top_k=k),
-        RetrievalNormalizedDCG(top_k=k),
-        RetrievalHitRate(top_k=k),
-        RetrievalMAP(top_k=k),
-        RetrievalMRR(top_k=k),
+        {
+            f"Precison@{k}": RetrievalPrecision(top_k=k, adaptive_k=True),
+            f"Recall@{k}": RetrievalRecall(top_k=k),
+            f"F1@{k}": RetrievalFBetaScore(top_k=k, beta=1.0, adaptive_k=True),
+            f"NDCG@{k}": RetrievalNormalizedDCG(top_k=k),
+            f"HitRate@{k}": RetrievalHitRate(top_k=k),
+            f"MAP@{k}": RetrievalMAP(top_k=k),
+            f"MRR@{k}": RetrievalMRR(top_k=k),
+        }
     )
 
     metrics.update(predictions, target, indexes=indexes)
