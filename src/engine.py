@@ -2,6 +2,7 @@ import torch
 from torch import nn
 import lightning.pytorch as L
 from torchmetrics import MetricCollection, Metric
+from torchmetrics.regression import R2Score, ExplainedVariance
 from torchmetrics.retrieval import (
     RetrievalPrecision,
     RetrievalRecall,
@@ -58,7 +59,7 @@ class UcoRecSys(L.LightningModule):
         self.lr = lr
         self.weight_decay = weight_decay
 
-        metrics = MetricCollection(
+        ranking_metrics = MetricCollection(
             {
                 f"Precison@{k}": RetrievalPrecision(top_k=k, adaptive_k=True),
                 f"Recall@{k}": RetrievalRecall(top_k=k),
@@ -69,9 +70,17 @@ class UcoRecSys(L.LightningModule):
                 f"MRR@{k}": RetrievalMRR(top_k=k),
             }
         )
+        predicted_metrics = MetricCollection(
+            {
+                "R2": R2Score(),
+                "Explained Variance": ExplainedVariance(),
+            }
+        )
 
-        self.test_metrics = metrics.clone(prefix="test/")
-        self.val_metrics = metrics.clone(prefix="val/")
+        self.test_ranking_metrics = ranking_metrics.clone(prefix="test/")
+        self.test_predicted_metrics = predicted_metrics.clone(prefix="test/")
+        self.val_ranking_metrics = ranking_metrics.clone(prefix="val/")
+        self.val_predicted_metrics = predicted_metrics.clone(prefix="val/")
 
     def forward(self, batch):
         score = self.model(batch)
@@ -82,23 +91,32 @@ class UcoRecSys(L.LightningModule):
             "rating": batch["rating"].float(),
         }
 
-    def step(self, batch, prefix, metrics=None):
+    def step(
+        self,
+        batch: dict,
+        prefix: str,
+        ranking_metrics: MetricCollection | None = None,
+        predicted_metrics: MetricCollection | None = None,
+    ):
         preds = self.model(batch)
         loss = self.loss_fn(preds, batch["rating"].float())
 
-        if metrics is not None:
-            target = (batch["rating"] >= self.threshold).int()
+        if ranking_metrics is not None and predicted_metrics is not None:
+            ratings = batch["rating"]
+            target = (ratings >= self.threshold).int()
             user_ids = batch["user_id"].long()
 
-            metrics.update(
+            ranking_metrics.update(
                 preds,
                 target,
                 indexes=user_ids,
             )
 
-        self.log(f"{prefix}/mse", loss, prog_bar=True, on_step=False, on_epoch=True)
+            predicted_metrics.update(preds, ratings)
+
+        self.log(f"{prefix}/MSE", loss, prog_bar=True, on_step=False, on_epoch=True)
         self.log(
-            f"{prefix}/rmse",
+            f"{prefix}/RMSE",
             torch.sqrt(loss),
             prog_bar=True,
             on_step=False,
@@ -111,22 +129,36 @@ class UcoRecSys(L.LightningModule):
         return self.step(batch, "train")
 
     def validation_step(self, batch):
-        self.step(batch, "val", metrics=self.val_metrics)
+        self.step(
+            batch,
+            "val",
+            ranking_metrics=self.val_ranking_metrics,
+            predicted_metrics=self.val_predicted_metrics,
+        )
 
     def test_step(self, batch):
-        self.step(batch, "test", metrics=self.test_metrics)
+        self.step(
+            batch,
+            "test",
+            ranking_metrics=self.test_ranking_metrics,
+            predicted_metrics=self.test_predicted_metrics,
+        )
 
     def on_validation_epoch_start(self):
-        self.val_metrics.reset()
+        self.val_ranking_metrics.reset()
+        self.val_predicted_metrics.reset()
 
     def on_validation_epoch_end(self):
-        self.log_dict(self.val_metrics.compute())
+        self.log_dict(self.val_ranking_metrics.compute())
+        self.log_dict(self.val_predicted_metrics.compute())
 
     def on_test_epoch_start(self):
-        self.test_metrics.reset()
+        self.test_ranking_metrics.reset()
+        self.test_predicted_metrics.reset()
 
     def on_test_epoch_end(self):
-        self.log_dict(self.test_metrics.compute())
+        self.log_dict(self.test_ranking_metrics.compute())
+        self.log_dict(self.test_predicted_metrics.compute())
 
     def predict_step(self, batch):
         return self.forward(batch)
@@ -140,5 +172,5 @@ class UcoRecSys(L.LightningModule):
         )
         return {
             "optimizer": optimizer,
-            "lr_scheduler": {"scheduler": scheduler, "monitor": "val/mse"},
+            "lr_scheduler": {"scheduler": scheduler, "monitor": "val/MSE"},
         }

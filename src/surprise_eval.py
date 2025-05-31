@@ -4,6 +4,7 @@ from typing import Literal, Callable
 from surprise.model_selection import KFold, LeaveOneOut
 from sklearn.preprocessing import LabelEncoder
 from torchmetrics import MetricCollection
+from torchmetrics.regression import R2Score, ExplainedVariance
 from torchmetrics.retrieval import (
     RetrievalPrecision,
     RetrievalRecall,
@@ -38,15 +39,20 @@ def preprocess_ratings(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def calc_metrics(
-    preds: list[Prediction], k: int = 10, threshold: float = 8
+    preds: list[Prediction],
+    k: int = 10,
+    threshold: float = 8,
 ) -> dict[str, float]:
+    # Extract prediction data
     indexes = torch.tensor([pred.uid for pred in preds])
     predictions = torch.tensor([pred.est for pred in preds])
     target = torch.tensor([pred.r_ui >= threshold for pred in preds])
+    ratings = torch.tensor([pred.r_ui for pred in preds])
 
-    metrics = MetricCollection(
+    # Ranking metrics
+    ranking_metrics = MetricCollection(
         {
-            f"Precison@{k}": RetrievalPrecision(top_k=k, adaptive_k=True),
+            f"Precision@{k}": RetrievalPrecision(top_k=k, adaptive_k=True),
             f"Recall@{k}": RetrievalRecall(top_k=k),
             f"F1@{k}": RetrievalFBetaScore(top_k=k, beta=1.0, adaptive_k=True),
             f"NDCG@{k}": RetrievalNormalizedDCG(top_k=k),
@@ -56,16 +62,34 @@ def calc_metrics(
         }
     )
 
-    metrics.update(predictions, target, indexes=indexes)
-    metrics_results = {k: v.item() for k, v in metrics.compute().items()}
-    rmse = accuracy.rmse(preds, verbose=False)
-    mse = accuracy.mse(preds, verbose=False)
-    metrics.reset()
+    # Prediction (regression) metrics
+    prediction_metrics = MetricCollection(
+        {
+            "R2": R2Score(),
+            "ExplainedVariance": ExplainedVariance(),
+        }
+    )
+
+    # Update and compute all metrics
+    ranking_metrics.update(predictions, target, indexes=indexes)
+    prediction_metrics.update(predictions, ratings)
+
+    ranking_results = {k: v.item() for k, v in ranking_metrics.compute().items()}
+    prediction_results = {k: v.item() for k, v in prediction_metrics.compute().items()}
+
+    # Surprise library metrics
+    rmse = float(accuracy.rmse(preds, verbose=False))
+    mse = float(accuracy.mse(preds, verbose=False))
+
+    # Clear stateful metrics
+    ranking_metrics.reset()
+    prediction_metrics.reset()
 
     return {
-        "rmse": float(rmse),
-        "mse": float(mse),
-        **metrics_results,
+        "MSE": mse,
+        "RMSE": rmse,
+        **ranking_results,
+        **prediction_results,
     }
 
 
