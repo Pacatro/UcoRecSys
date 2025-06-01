@@ -4,7 +4,7 @@ from sklearn.model_selection import KFold, LeaveOneOut
 from typing import Literal
 from lightning.pytorch.callbacks import EarlyStopping, ModelCheckpoint
 
-from dataset import ELearningDataModule
+from datamodule import ELearningDataModule
 from engine import UcoRecSys
 
 

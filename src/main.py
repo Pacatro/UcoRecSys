@@ -24,7 +24,8 @@ import db
 import config
 from evaluation import cross_validate
 from surprise_eval import cross_validation, preprocess_ratings
-from dataset import ELearningDataModule, load_data
+from datasets import load_data
+from datamodule import ELearningDataModule
 from engine import UcoRecSys
 from models import NeuralHybrid
 from args_parser import model_parser
@@ -61,6 +62,7 @@ def inference(
         print(f"Dataset sparsity: {dm.sparsity}")
         print(f"Dataset threshold: {dm.threshold}")
         print(dm.train_dataset.df)
+        print(model)
 
     recsys = UcoRecSys(
         model=model,
