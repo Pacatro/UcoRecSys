@@ -19,6 +19,7 @@ def cross_validate(
     batch_size: int = 128,
     patience: int = 5,
     delta: float = 0.001,
+    ignored_cols: list[str] = [],
     verbose: bool = False,
 ) -> pd.Series:
     cv = (
@@ -40,6 +41,7 @@ def cross_validate(
             batch_size=batch_size,
             test_size=0,
             val_size=len(val_df) / (len(train_df) + len(val_df)),
+            ignored_cols=ignored_cols,
         )
         dm.setup("fit")
 
@@ -53,14 +55,14 @@ def cross_validate(
         recsys = UcoRecSys(model=model, threshold=dm.threshold)
 
         earlystop = EarlyStopping(
-            monitor="val/loss",
+            monitor="val/MSE",
             patience=patience,
             mode="min",
             min_delta=delta,
-            verbose=False,
+            verbose=verbose,
         )
         ckpt = ModelCheckpoint(
-            monitor="val/loss", mode="min", save_top_k=1, filename="best-model"
+            monitor="val/MSE", mode="min", save_top_k=1, filename="best-model"
         )
 
         trainer = L.Trainer(
@@ -83,9 +85,12 @@ def cross_validate(
             threshold=dm.threshold,
         )
 
-        metrics = trainer.validate(recsys, datamodule=dm)
-        print(metrics[0])
-        fold_metrics.append(metrics[0])
+        metrics = trainer.validate(recsys, datamodule=dm)[0]
+
+        if verbose:
+            print(pd.DataFrame(metrics))
+
+        fold_metrics.append(metrics)
 
     avg_metrics = pd.DataFrame(fold_metrics).mean()
     return avg_metrics

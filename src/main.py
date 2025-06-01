@@ -1,11 +1,9 @@
 import pandas as pd
-import numpy as np
 from pathlib import Path
 import lightning as L
 from lightning.pytorch.loggers import TensorBoardLogger
 from lightning.pytorch.callbacks import EarlyStopping, ModelCheckpoint
 from typing import Literal
-from sklearn.preprocessing import MinMaxScaler
 from surprise import (
     Reader,
     Dataset,
@@ -26,153 +24,10 @@ import db
 import config
 from evaluation import cross_validate
 from surprise_eval import cross_validation, preprocess_ratings
-from dataset import ELearningDataModule
+from dataset import ELearningDataModule, load_data
 from engine import UcoRecSys
 from models import NeuralHybrid
 from args_parser import model_parser
-
-
-def load_mars() -> pd.DataFrame:
-    explicit_df_en = pd.read_csv("./data/mars_dataset/explicit_ratings_en.csv")
-    explicit_df_fr = pd.read_csv("./data/mars_dataset/explicit_ratings_fr.csv")
-
-    items_en = pd.read_csv("./data/mars_dataset/items_en.csv")
-    items_fr = pd.read_csv("./data/mars_dataset/items_fr.csv")
-
-    df_explicit = pd.concat([explicit_df_en, explicit_df_fr], ignore_index=True)
-    df_items = pd.concat([items_en, items_fr], ignore_index=True)
-
-    df_explicit["created_at"] = pd.to_datetime(df_explicit["created_at"])
-    df_items = df_items.drop(columns=["created_at"])
-
-    df = pd.merge(df_explicit, df_items, on="item_id", how="inner")
-
-    df["Difficulty"] = df["Difficulty"].fillna("Undefined").astype("category")
-    df["type"] = df["type"].fillna("Undefined").astype("category")
-
-    df.rename(
-        columns={"Difficulty": "difficulty", "type": "item_type"},
-        inplace=True,
-    )
-
-    features = [
-        "user_id",
-        "item_id",
-        "item_type",
-        "difficulty",
-        "nb_views",
-        "watch_percentage",
-        "rating",
-    ]
-
-    return df[features]
-
-
-def load_itm() -> pd.DataFrame:
-    ratings_df = pd.read_csv("./data/itm_dataset/ratings.csv")
-    items_df = pd.read_csv("./data/itm_dataset/items.csv")
-    merged_df = pd.merge(left=items_df, right=ratings_df, how="inner", on="Item")
-    merged_df = merged_df.rename(
-        columns={"UserID": "user_id", "Item": "item_id", "Rating": "rating"}
-    )
-    merged_df["Class"] = merged_df["Class"].astype("category")
-    merged_df["Semester"] = merged_df["Semester"].astype("category")
-    merged_df["Lockdown"] = merged_df["Lockdown"].astype("category")
-    merged_df["Title"] = merged_df["Title"].astype("category")
-
-    features = [
-        "user_id",
-        "item_id",
-        "Title",
-        "Semester",
-        "Class",
-        "App",
-        "Lockdown",
-        "Ease",
-        "rating",
-    ]
-
-    return merged_df[features]
-
-
-def load_coursera() -> pd.DataFrame:
-    df = pd.read_csv("./data/coursera_dataset/Coursera.csv")
-    num_users = 2000
-    num_interactions = 20000
-    user_ids = np.random.randint(1, num_users + 1, size=num_interactions)
-    course_titles = np.random.choice(df["Course Name"], size=num_interactions)
-    interaction_types = np.random.choice(
-        ["view", "enroll", "complete", "rate"],
-        size=num_interactions,
-        p=[0.4, 0.3, 0.2, 0.1],
-    )
-
-    # Asegurar que todos tengan un rating (aunque no sea realista para algunas interacciones)
-    ratings = np.random.uniform(1, 5, size=num_interactions)
-
-    interactions = pd.DataFrame(
-        {
-            "user_id": user_ids,
-            "Course Name": course_titles,
-            "interaction_type": interaction_types,
-            "rating": ratings,
-        }
-    )
-
-    df_merged = interactions.merge(df, on="Course Name", how="left", indicator=True)
-    df_merged = df_merged[df_merged["_merge"] == "both"].drop(columns=["_merge"])
-
-    df_merged = df_merged.rename(columns={"Course Name": "item_id"})
-    df_merged["item_id"] = df_merged["item_id"].astype("category")
-    df_merged["user_id"] = df_merged["user_id"].astype("category")
-    df_merged["Difficulty Level"] = df_merged["Difficulty Level"].astype("category")
-    df_merged["University"] = df_merged["University"].astype("category")
-
-    features = [
-        "user_id",
-        "item_id",
-        "Difficulty Level",
-        "University",
-        "rating",
-    ]
-
-    return df_merged[features]
-
-
-def load_doris() -> pd.DataFrame:
-    course_info = pd.read_csv("./data/doris_dataset/CourseInformationTable.csv")
-    course_selection = pd.read_csv("./data/doris_dataset/CourseSelectionTable.csv")
-    merged_df = pd.merge(
-        left=course_info, right=course_selection, how="inner", on="CourseId"
-    )
-    merged_df.rename(
-        columns={"CourseId": "item_id", "StudentId": "user_id", "Score": "rating"},
-        inplace=True,
-    )
-    merged_df["rating"] = merged_df["rating"].fillna(0)
-    merged_df["rating"] = MinMaxScaler(feature_range=(0, 10)).fit_transform(
-        merged_df[["rating"]]
-    )
-    merged_df["Type"] = merged_df["Type"].fillna("Undefined").astype("category")
-    merged_df["CourseCollege"] = (
-        merged_df["CourseCollege"].fillna("Undefined").astype("category")
-    )
-    features = ["user_id", "item_id", "Type", "rating"]
-    return merged_df[features]
-
-
-def load_data(
-    dataset_name: Literal["mars", "itm", "coursera", "doris"],
-) -> pd.DataFrame:
-    match dataset_name:
-        case "mars":
-            return load_mars()
-        case "itm":
-            return load_itm()
-        case "coursera":
-            return load_coursera()
-        case "doris":
-            return load_doris()
 
 
 def inference(
@@ -182,6 +37,7 @@ def inference(
     batch_size: int,
     balance: bool,
     k: int = 10,
+    ignored_cols: list[str] = [],
     verbose: bool = False,
 ):
     dm = ELearningDataModule(
@@ -189,6 +45,7 @@ def inference(
         target=target,
         batch_size=batch_size,
         balance=balance,
+        ignored_cols=ignored_cols,
     )
 
     dm.setup("fit")
@@ -204,7 +61,6 @@ def inference(
         print(f"Dataset sparsity: {dm.sparsity}")
         print(f"Dataset threshold: {dm.threshold}")
         print(dm.train_dataset.df)
-        print(model)
 
     recsys = UcoRecSys(
         model=model,
@@ -253,6 +109,7 @@ def eval_model(
     batch_size: int,
     dataset: str,
     k: int,
+    ignored_cols: list[str] = [],
     cv_type: Literal["kfold", "loo"] = "kfold",
     verbose: bool = False,
 ):
@@ -267,6 +124,7 @@ def eval_model(
         k=k,
         patience=config.PATIENCE,
         delta=config.DELTA,
+        ignored_cols=ignored_cols,
         verbose=verbose,
     )
 
@@ -332,6 +190,8 @@ def main():
     batch_size = config.BATCH_SIZE if args.dataset in ["mars", "doris"] else 32
     print(f"Batch size: {batch_size}")
 
+    ignored_cols = ["Semester", "Grade"] if args.dataset == "doris" else []
+
     if args.inference:
         inference(
             df,
@@ -340,11 +200,20 @@ def main():
             batch_size=batch_size,
             balance=config.BALANCE,
             k=config.K,
+            ignored_cols=ignored_cols,
             verbose=args.verbose,
         )
     elif args.eval:
         print("CV type:", args.cvtype)
-        eval_model(df, batch_size, args.dataset, config.K, args.cvtype, args.verbose)
+        eval_model(
+            df=df,
+            batch_size=batch_size,
+            dataset=args.dataset,
+            k=config.K,
+            cv_type=args.cvtype,
+            ignored_cols=ignored_cols,
+            verbose=args.verbose,
+        )
     else:
         print(df)
 
