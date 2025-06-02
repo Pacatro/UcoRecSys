@@ -118,7 +118,7 @@ def eval_model(
     avg_metrics = cross_validate(
         df=df,
         model_class=NeuralHybrid,
-        n_splits=5,
+        n_splits=config.K_FOLD,
         random_state=42,
         epochs=config.EPOCHS,
         cv_type=cv_type,
