@@ -98,6 +98,9 @@ def train_model(
 
     trainer.fit(recsys, datamodule=dm)
 
+    dm.setup("test")
+    trainer.test(model=recsys, datamodule=dm)
+
     # Guardar ruta del mejor modelo
     best_path = checkpoint.best_model_path
     # Copiar o renombrar según output_model
@@ -173,6 +176,10 @@ def eval_model(
     batch_size: int,
     dataset: str,
     k: int,
+    epochs: int,
+    n_splits: int,
+    patience: int,
+    delta: float,
     ignored_cols: list[str] = [],
     cv_type: Literal["kfold", "loo"] = "kfold",
     verbose: bool = False,
@@ -180,14 +187,14 @@ def eval_model(
     avg_metrics = cross_validate(
         df=df,
         model_class=NeuralHybrid,
-        n_splits=config.K_FOLD,
+        n_splits=n_splits,
         random_state=42,
-        epochs=config.EPOCHS,
+        epochs=epochs,
         cv_type=cv_type,
         batch_size=batch_size,
         k=k,
-        patience=config.PATIENCE,
-        delta=config.DELTA,
+        patience=patience,
+        delta=delta,
         ignored_cols=ignored_cols,
         verbose=verbose,
     )
@@ -277,6 +284,10 @@ def main():
     elif args.eval:
         eval_model(
             df=df,
+            epochs=args.epochs,
+            n_splits=args.splits,
+            delta=config.DELTA,
+            patience=config.PATIENCE,
             batch_size=args.batch_size,
             dataset=args.dataset,
             k=args.k,
