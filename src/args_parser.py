@@ -113,6 +113,13 @@ def build_parser() -> ArgumentParser:
     # 5) Grupo para opciones generales / misc
     misc_group = parser.add_argument_group("Opciones generales")
     misc_group.add_argument(
+        "-p",
+        "--plot",
+        action="store_true",
+        help="Generar gráficos de métricas durante la ejecución.",
+        default=config.PLOT,
+    )
+    misc_group.add_argument(
         "-v",
         "--verbose",
         action="store_true",

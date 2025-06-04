@@ -51,6 +51,10 @@ class UcoRecSys(L.LightningModule):
         weight_decay: float = 1e-6,
         k: int = 10,
         loss_fn: nn.Module | None = None,
+        val_metrics_path: str = "val_metrics.png",
+        train_metrics_path: str = "train_metrics.png",
+        train_losses_path: str = "train_losses.png",
+        plot: bool = False,
     ):
         super().__init__()
         self.save_hyperparameters(ignore=["model"])
@@ -59,6 +63,10 @@ class UcoRecSys(L.LightningModule):
         self.threshold = threshold
         self.lr = lr
         self.weight_decay = weight_decay
+        self.val_metrics_path = val_metrics_path
+        self.train_metrics_path = train_metrics_path
+        self.train_losses_path = train_losses_path
+        self.plot = plot
 
         ranking_metrics = MetricCollection(
             {
@@ -78,7 +86,6 @@ class UcoRecSys(L.LightningModule):
             }
         )
 
-        self.train_ranking_metrics = ranking_metrics.clone(prefix="train/")
         self.val_ranking_metrics = ranking_metrics.clone(prefix="val/")
         self.val_predicted_metrics = predicted_metrics.clone(prefix="val/")
         self.test_ranking_metrics = ranking_metrics.clone(prefix="test/")
@@ -88,6 +95,9 @@ class UcoRecSys(L.LightningModule):
         self.train_metrics_history = []
         self.val_metrics_history = []
         self.train_losses = []
+        self.train_ranking_metrics = (
+            ranking_metrics.clone(prefix="train/") if self.plot else None
+        )
 
     def forward(self, batch):
         score = self.model(batch)
@@ -105,12 +115,12 @@ class UcoRecSys(L.LightningModule):
         ranking_metrics: MetricCollection | None = None,
         predicted_metrics: MetricCollection | None = None,
     ):
-        preds = self.model(batch)
-        loss = self.loss_fn(preds, batch["rating"].float())
-        self.train_losses.append(loss.item())
-
         ratings = batch["rating"]
         user_ids = batch["user_id"].long()
+
+        preds = self.model(batch)
+        loss = self.loss_fn(preds, ratings.float())
+        self.train_losses.append(loss.item())
 
         if ranking_metrics is not None:
             target = (ratings >= self.threshold).int()
@@ -154,12 +164,14 @@ class UcoRecSys(L.LightningModule):
         )
 
     def on_train_epoch_start(self):
-        self.train_ranking_metrics.reset()
+        if self.plot:
+            self.train_ranking_metrics.reset()
 
     def on_train_epoch_end(self):
-        train_ranking_metrics = self.train_ranking_metrics.compute()
-        self.train_metrics_history.append(train_ranking_metrics)
-        self.log_dict(train_ranking_metrics)
+        if self.plot:
+            train_ranking_metrics = self.train_ranking_metrics.compute()
+            self.train_metrics_history.append(train_ranking_metrics)
+            self.log_dict(train_ranking_metrics)
 
     def on_validation_epoch_start(self):
         self.val_ranking_metrics.reset()
@@ -182,23 +194,35 @@ class UcoRecSys(L.LightningModule):
         self.log_dict(self.test_predicted_metrics.compute())
 
     def on_fit_end(self):
-        fig, ax = plt.subplots(figsize=(12, 8))
-        self.val_ranking_metrics.plot(
-            val=self.val_metrics_history, ax=ax, together=True
-        )
-        fig.savefig("val_metrics_evolution.png")
-        fig, ax = plt.subplots(figsize=(12, 8))
-        self.train_ranking_metrics.plot(
-            val=self.train_metrics_history, ax=ax, together=True
-        )
-        fig.savefig("train_metrics_evolution.png")
+        if self.plot:
+            fig, ax = plt.subplots(figsize=(12, 8))
+            self.val_ranking_metrics.plot(
+                val=self.val_metrics_history, ax=ax, together=True
+            )
+            fig.savefig(self.val_metrics_path)
+
+            fig, ax = plt.subplots(figsize=(12, 8))
+            self.train_ranking_metrics.plot(
+                val=self.train_metrics_history, ax=ax, together=True
+            )
+            fig.savefig(self.train_metrics_path)
+
+            self.plot_train_losses()
 
     def predict_step(self, batch):
         return self.forward(batch)
 
     def plot_train_losses(self):
-        plt.plot(self.train_losses)
-        plt.savefig("train_losses.png")
+        plt.figure(figsize=(10, 6))
+        plt.plot(self.train_losses, label="Training Loss (MSE)")
+        plt.xlabel("Batch Steps")
+        plt.ylabel("Loss")
+        plt.title("Training Loss Evolution")
+        plt.grid(True)
+        plt.legend()
+        plt.tight_layout()
+        plt.savefig(self.train_losses_path)
+        plt.close()
 
     def configure_optimizers(self):
         optimizer = torch.optim.Adam(

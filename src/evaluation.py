@@ -20,6 +20,7 @@ def cross_validate(
     patience: int = 5,
     delta: float = 0.001,
     ignored_cols: list[str] = [],
+    plot: bool = False,
     verbose: bool = False,
 ) -> pd.Series:
     cv = (
@@ -52,7 +53,7 @@ def cross_validate(
             n_items=dm.num_items,
         )
 
-        recsys = UcoRecSys(model=model, threshold=dm.threshold)
+        recsys = UcoRecSys(model=model, threshold=dm.threshold, plot=plot)
 
         earlystop = EarlyStopping(
             monitor="val/MSE",
@@ -86,10 +87,6 @@ def cross_validate(
         )
 
         metrics = trainer.validate(recsys, datamodule=dm)[0]
-
-        if verbose:
-            print(f"Fold {fold}/{n_folds} metrics:")
-            print(pd.DataFrame(metrics))
 
         fold_metrics.append(metrics)
 

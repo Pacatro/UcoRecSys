@@ -14,3 +14,4 @@ DATASETS_CHOICES = ["mars", "coursera", "itm"]
 DATASET = "mars"
 CV_TYPES_CHOICES = ["kfold", "loo"]
 CV_TYPE = "kfold"
+PLOT = False

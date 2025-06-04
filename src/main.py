@@ -42,6 +42,7 @@ def train_model(
     k_ranking: int,
     output_model: str,
     ignored_cols: list[str] = [],
+    plot: bool = False,
     verbose: bool = False,
 ):
     dm = ELearningDataModule(
@@ -73,6 +74,7 @@ def train_model(
         model=model,
         k=k_ranking,
         threshold=dm.threshold,
+        plot=plot,
     )
 
     early_stop = EarlyStopping(
@@ -182,6 +184,7 @@ def eval_model(
     delta: float,
     ignored_cols: list[str] = [],
     cv_type: Literal["kfold", "loo"] = "kfold",
+    plot: bool = False,
     verbose: bool = False,
 ):
     avg_metrics = cross_validate(
@@ -196,6 +199,7 @@ def eval_model(
         patience=patience,
         delta=delta,
         ignored_cols=ignored_cols,
+        plot=plot,
         verbose=verbose,
     )
 
@@ -278,6 +282,7 @@ def main():
             balance=args.balance,
             k_ranking=args.k_ranking,
             output_model=args.output_model,
+            plot=args.plot,
             verbose=args.verbose,
         )
     # Modo EVAL
@@ -292,6 +297,7 @@ def main():
             dataset=args.dataset,
             k=args.k,
             cv_type=args.cvtype,
+            plot=args.plot,
             verbose=args.verbose,
         )
     # Modo SURPRISE
