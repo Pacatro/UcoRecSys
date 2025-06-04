@@ -88,6 +88,7 @@ def cross_validate(
         metrics = trainer.validate(recsys, datamodule=dm)[0]
 
         if verbose:
+            print(f"Fold {fold}/{n_folds} metrics:")
             print(pd.DataFrame(metrics))
 
         fold_metrics.append(metrics)

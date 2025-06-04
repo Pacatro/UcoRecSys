@@ -27,13 +27,89 @@ from surprise_eval import cross_validation, preprocess_ratings
 from datasets import load_data
 from datamodule import ELearningDataModule
 from engine import UcoRecSys
-from models import NeuralHybrid
-from args_parser import model_parser
+from model import NeuralHybrid
+from args_parser import build_parser
+
+
+def train_model(
+    df: pd.DataFrame,
+    dataset_name: str,
+    target: str,
+    epochs: int,
+    # lr: float,
+    batch_size: int,
+    balance: bool,
+    k_ranking: int,
+    output_model: str,
+    ignored_cols: list[str] = [],
+    verbose: bool = False,
+):
+    dm = ELearningDataModule(
+        df,
+        target=target,
+        batch_size=batch_size,
+        balance=balance,
+        ignored_cols=ignored_cols,
+    )
+
+    dm.setup("fit")
+
+    model = NeuralHybrid(
+        n_users=dm.num_users,
+        n_items=dm.num_items,
+        cont_features=dm.cont_features,
+        cat_cardinalities=dm.cat_cardinalities,
+    )
+
+    if verbose:
+        print(f"[TRAIN] Dataset {dataset_name}:\n{dm.df}\n")
+        print(f"[TRAIN] Dataset {dataset_name} sparsity: {dm.sparsity}")
+        print(f"[TRAIN] Dataset {dataset_name} threshold: {dm.threshold}")
+        print(f"[TRAIN] Train shape: {dm.train_dataset.df.shape}")
+        print(f"[TRAIN] Val shape: {dm.val_dataset.df.shape}")
+        print(f"[TRAIN] Model:\n{model}\n")
+
+    recsys = UcoRecSys(
+        model=model,
+        k=k_ranking,
+        threshold=dm.threshold,
+    )
+
+    early_stop = EarlyStopping(
+        monitor="val/MSE",
+        patience=config.PATIENCE,
+        mode="min",
+        min_delta=config.DELTA,
+        verbose=True,
+    )
+
+    checkpoint = ModelCheckpoint(
+        monitor="val/MSE", mode="min", save_top_k=1, filename="best-model"
+    )
+
+    trainer = L.Trainer(
+        logger=TensorBoardLogger(name="ucorecsys", save_dir="lightning_logs"),
+        max_epochs=epochs,
+        accelerator="auto",
+        devices="auto",
+        callbacks=[early_stop, checkpoint],
+        log_every_n_steps=10,
+    )
+
+    trainer.fit(recsys, datamodule=dm)
+
+    # Guardar ruta del mejor modelo
+    best_path = checkpoint.best_model_path
+    # Copiar o renombrar según output_model
+    Path(best_path).rename(output_model)
+    if verbose:
+        print(f"Modelo entrenado guardado en: {output_model}")
 
 
 def inference(
     df: pd.DataFrame,
     dataset_name: str,
+    model_path: str,
     target: str,
     batch_size: int,
     balance: bool,
@@ -59,10 +135,8 @@ def inference(
     )
 
     if verbose:
-        print(f"Dataset sparsity: {dm.sparsity}")
-        print(f"Dataset threshold: {dm.threshold}")
-        print(dm.train_dataset.df)
-        print(model)
+        print(f"[INFERENCE] Dataset sparsity: {dm.sparsity}")
+        print(f"[INFERENCE] Dataset threshold: {dm.threshold}")
 
     recsys = UcoRecSys(
         model=model,
@@ -70,40 +144,28 @@ def inference(
         threshold=dm.threshold,
     )
 
-    early_stop = EarlyStopping(
-        monitor="val/MSE",
-        patience=config.PATIENCE,
-        mode="min",
-        min_delta=config.DELTA,
-        verbose=True,
-    )
-
-    checkpoint = ModelCheckpoint(
-        monitor="val/MSE", mode="min", save_top_k=1, filename="best-model"
-    )
-
-    trainer = L.Trainer(
-        logger=TensorBoardLogger(name="ucorecsys", save_dir="lightning_logs"),
-        max_epochs=config.EPOCHS,
-        accelerator="auto",
-        devices="auto",
-        callbacks=[early_stop, checkpoint],
-        log_every_n_steps=10,
-        fast_dev_run=config.FAST_DEV_RUN,
-    )
-
-    trainer.fit(recsys, datamodule=dm)
-
+    # Cargar checkpoint proporcionado
     recsys = UcoRecSys.load_from_checkpoint(
-        checkpoint.best_model_path,
+        model_path,
         model=model,
         k=k,
         threshold=dm.threshold,
     )
 
+    # Configurar y ejecutar prueba
     dm.setup("test")
+    trainer = L.Trainer(
+        logger=TensorBoardLogger(name="ucorecsys", save_dir="lightning_logs"),
+        accelerator="auto",
+        devices="auto",
+    )
+
     test_metrics = trainer.test(model=recsys, datamodule=dm)
-    pd.DataFrame(test_metrics).to_csv(f"inference_{dataset_name}_results_k={k}.csv")
+    file_path = f"inference_{dataset_name}_results"
+    pd.DataFrame(test_metrics).to_csv(file_path + ".csv")
+
+    if verbose:
+        print(f"Resultados de inferencia guardados en: {file_path}.csv")
 
 
 def eval_model(
@@ -131,7 +193,7 @@ def eval_model(
     )
 
     if avg_metrics is not None:
-        avg_metrics.to_csv(f"{cv_type}_eval_{dataset}_results_k={k}.csv")
+        avg_metrics.to_csv(f"{cv_type}_eval_{dataset}_results.csv")
 
 
 def surprise_eval(
@@ -173,60 +235,64 @@ def surprise_eval(
         )
         algos_metrics[algo.__name__] = results
 
-    pd.DataFrame(algos_metrics).to_csv(
-        f"surprise_{dataset}_{cv_type}_metrics_k={k}.csv"
-    )
+    algos_metrics.to_csv(f"surprise_{dataset}_{cv_type}.csv")
 
 
 def main():
     if not Path(db.DB_FILE_PATH).exists():
         db.csv_to_sql(verbose=True)
 
-    args = model_parser.parse_args()
-
-    print(f"Using {args.dataset} dataset")
-    print(f"Balance: {config.BALANCE}")
-    print(f"Patience = {config.PATIENCE}, delta = {config.DELTA}")
+    parser = build_parser()
+    args = parser.parse_args()
 
     df = load_data(args.dataset)
-    batch_size = config.BATCH_SIZE if args.dataset in ["mars", "doris"] else 32
-    print(f"Batch size: {batch_size}")
 
-    ignored_cols = ["Semester", "Grade"] if args.dataset == "doris" else []
-
+    # Modo INFERENCE
     if args.inference:
         inference(
-            df,
-            target=config.TARGET,
+            df=df,
             dataset_name=args.dataset,
-            batch_size=batch_size,
-            balance=config.BALANCE,
-            k=config.K,
-            ignored_cols=ignored_cols,
+            model_path=args.inference,
+            target=config.TARGET_COL,
+            batch_size=args.batch_size,
+            balance=args.balance,
+            k=args.k_ranking,
             verbose=args.verbose,
         )
+    # Modo TRAIN
+    elif args.train:
+        train_model(
+            df=df,
+            dataset_name=args.dataset,
+            target=config.TARGET_COL,
+            epochs=args.epochs,
+            # lr=args.lr,
+            batch_size=args.batch_size,
+            balance=args.balance,
+            k_ranking=args.k_ranking,
+            output_model=args.output_model,
+            verbose=args.verbose,
+        )
+    # Modo EVAL
     elif args.eval:
-        print("CV type:", args.cvtype)
         eval_model(
             df=df,
-            batch_size=batch_size,
+            batch_size=args.batch_size,
             dataset=args.dataset,
-            k=config.K,
+            k=args.k,
             cv_type=args.cvtype,
-            ignored_cols=ignored_cols,
             verbose=args.verbose,
         )
-    else:
-        print(df)
-
+    # Modo SURPRISE
     if args.surprise:
         surprise_eval(
-            df,
+            df=df,
             dataset=args.dataset,
             cv_type=args.cvtype,
-            min_rating=df[config.TARGET].min(),
-            max_rating=df[config.TARGET].max(),
-            k=config.K,
+            min_rating=df[config.TARGET_COL].min(),
+            max_rating=df[config.TARGET_COL].max(),
+            k=args.k,
+            target=config.TARGET_COL,
         )
 
 

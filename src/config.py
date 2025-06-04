@@ -1,25 +1,16 @@
 BALANCE = False
-BINARIZE = False
-FAST_DEV_RUN = False
+LR = 0.001
 BATCH_SIZE = 128
 EPOCHS = 50
 PATIENCE = 5
 DELTA = 0.001
 K = 10
 K_FOLD = 10
-THRESHOLD = 8
-NUM_USERS = 10611
-NUM_ITEMS = 2126
-TARGET = "rating"
-FEATURES = [
-    "user_id",
-    "item_id",
-    "Semester",
-    "Class",
-    "App",
-    # "Data",
-    # "item_type",
-    # "difficulty",
-    # "nb_views",
-    # "watch_percentage",
-]
+TARGET_COL = "rating"
+USER_COL = "user_id"
+ITEM_COL = "item_id"
+OUTPUT_MODEL_PATH = "model.pt"
+DATASETS_CHOICES = ["mars", "coursera", "itm"]
+DATASET = "mars"
+CV_TYPES_CHOICES = ["kfold", "loo"]
+CV_TYPE = "kfold"

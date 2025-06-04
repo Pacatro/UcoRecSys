@@ -18,3 +18,6 @@ lightning_logs/
 
 # Other exetensions
 *.json
+
+# Models files
+*.pt

@@ -100,7 +100,7 @@ def cross_validation(
     k: int = 10,
     threshold: float = 8.0,
     cv_type: Literal["kfold", "loo"] | None = None,
-) -> dict[str, float]:
+) -> pd.DataFrame:
     cv_type = cv_type if not None else "kfold"
     print(f"Running {algo_class.__name__} cross validation ({cv_type})")
     cv = (
@@ -119,4 +119,4 @@ def cross_validation(
         fold_metrics.append(metrics)
 
     avg_metrics = pd.DataFrame(fold_metrics).mean()
-    return avg_metrics.to_dict()
+    return avg_metrics

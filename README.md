@@ -1,9 +1,10 @@
 # UcoRecSys
 
-Este repositorio forma parte de mi Trabajo de Fin de Grado (TFG) en la Universidad de Córdoba (UCO):  
-***Aplicación de sistemas de recomendación en entornos educativos.***
+Este repositorio forma parte de Trabajo de Fin de Grado (TFG) realizado por Franacisco de Paula Algar Muñoz en la Universidad de Córdoba (UCO) titulado: ***Aplicación de sistemas de recomendación en entornos educativos.***
 
 El objetivo de este TFG es desarrollar un sistema de recomendación para e-learning basado en un conjunto de datos de referencia, lo que permitirá evaluar su rendimiento en comparación con otros modelos previos.
+
+## Cómo usar
 
 ## Puesta en marcha
 
@@ -21,10 +22,10 @@ Sigue estos pasos para ejecutar el proyecto:
 
 2. **Ejecuta el proyecto**
 
-    El siguiente comando ejecutará el proyecto creando el entorno virtual e instalando todas las dependencias necesarias:
+    El siguiente comando creará el entorno virtual e instalando todas las dependencias necesarias:
 
     ```bash
-    uv run main.py
+    uv build
     ```
 
 ## Autor  

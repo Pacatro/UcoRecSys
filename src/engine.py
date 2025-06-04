@@ -1,6 +1,7 @@
 import torch
 from torch import nn
 import lightning.pytorch as L
+import matplotlib.pyplot as plt
 from torchmetrics import MetricCollection, Metric
 from torchmetrics.regression import R2Score, ExplainedVariance
 from torchmetrics.retrieval import (
@@ -77,10 +78,16 @@ class UcoRecSys(L.LightningModule):
             }
         )
 
-        self.test_ranking_metrics = ranking_metrics.clone(prefix="test/")
-        self.test_predicted_metrics = predicted_metrics.clone(prefix="test/")
+        self.train_ranking_metrics = ranking_metrics.clone(prefix="train/")
         self.val_ranking_metrics = ranking_metrics.clone(prefix="val/")
         self.val_predicted_metrics = predicted_metrics.clone(prefix="val/")
+        self.test_ranking_metrics = ranking_metrics.clone(prefix="test/")
+        self.test_predicted_metrics = predicted_metrics.clone(prefix="test/")
+
+        # For plotting
+        self.train_metrics_history = []
+        self.val_metrics_history = []
+        self.train_losses = []
 
     def forward(self, batch):
         score = self.model(batch)
@@ -100,18 +107,20 @@ class UcoRecSys(L.LightningModule):
     ):
         preds = self.model(batch)
         loss = self.loss_fn(preds, batch["rating"].float())
+        self.train_losses.append(loss.item())
 
-        if ranking_metrics is not None and predicted_metrics is not None:
-            ratings = batch["rating"]
+        ratings = batch["rating"]
+        user_ids = batch["user_id"].long()
+
+        if ranking_metrics is not None:
             target = (ratings >= self.threshold).int()
-            user_ids = batch["user_id"].long()
-
             ranking_metrics.update(
                 preds,
                 target,
                 indexes=user_ids,
             )
 
+        if predicted_metrics is not None:
             predicted_metrics.update(preds, ratings)
 
         self.log(f"{prefix}/MSE", loss, prog_bar=True, on_step=False, on_epoch=True)
@@ -126,7 +135,7 @@ class UcoRecSys(L.LightningModule):
         return loss
 
     def training_step(self, batch):
-        return self.step(batch, "train")
+        return self.step(batch, "train", ranking_metrics=self.train_ranking_metrics)
 
     def validation_step(self, batch):
         self.step(
@@ -144,13 +153,25 @@ class UcoRecSys(L.LightningModule):
             predicted_metrics=self.test_predicted_metrics,
         )
 
+    def on_train_epoch_start(self):
+        self.train_ranking_metrics.reset()
+
+    def on_train_epoch_end(self):
+        train_ranking_metrics = self.train_ranking_metrics.compute()
+        self.train_metrics_history.append(train_ranking_metrics)
+        self.log_dict(train_ranking_metrics)
+
     def on_validation_epoch_start(self):
         self.val_ranking_metrics.reset()
         self.val_predicted_metrics.reset()
 
     def on_validation_epoch_end(self):
-        self.log_dict(self.val_ranking_metrics.compute())
-        self.log_dict(self.val_predicted_metrics.compute())
+        val_ranking_metrics = self.val_ranking_metrics.compute()
+        val_predicted_metrics = self.val_predicted_metrics.compute()
+        # val_metrics = val_ranking_metrics.update(val_predicted_metrics)
+        self.val_metrics_history.append(val_ranking_metrics)
+        self.log_dict(val_predicted_metrics)
+        self.log_dict(val_ranking_metrics)
 
     def on_test_epoch_start(self):
         self.test_ranking_metrics.reset()
@@ -160,8 +181,24 @@ class UcoRecSys(L.LightningModule):
         self.log_dict(self.test_ranking_metrics.compute())
         self.log_dict(self.test_predicted_metrics.compute())
 
+    def on_fit_end(self):
+        fig, ax = plt.subplots(figsize=(12, 8))
+        self.val_ranking_metrics.plot(
+            val=self.val_metrics_history, ax=ax, together=True
+        )
+        fig.savefig("val_metrics_evolution.png")
+        fig, ax = plt.subplots(figsize=(12, 8))
+        self.train_ranking_metrics.plot(
+            val=self.train_metrics_history, ax=ax, together=True
+        )
+        fig.savefig("train_metrics_evolution.png")
+
     def predict_step(self, batch):
         return self.forward(batch)
+
+    def plot_train_losses(self):
+        plt.plot(self.train_losses)
+        plt.savefig("train_losses.png")
 
     def configure_optimizers(self):
         optimizer = torch.optim.Adam(
