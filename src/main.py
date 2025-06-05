@@ -205,7 +205,7 @@ def eval_model(
     )
 
     if avg_metrics is not None:
-        avg_metrics.to_csv(f"{cv_type}_eval_{dataset}_results.csv")
+        avg_metrics.to_csv(f"{cv_type}_k={n_splits}_eval_{dataset}_top-{k}.csv")
 
 
 def surprise_eval(
@@ -249,7 +249,7 @@ def surprise_eval(
         algos_metrics[algo.__name__] = results
 
     algos_metrics = pd.DataFrame(algos_metrics)
-    algos_metrics.to_csv(f"surprise_{dataset}_{cv_type}.csv")
+    algos_metrics.to_csv(f"surprise_{cv_type}_k={n_splits}_{dataset}_top-{k}.csv")
 
 
 def main():
