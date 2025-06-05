@@ -36,10 +36,10 @@ def train_model(
     dataset_name: str,
     target: str,
     epochs: int,
-    # lr: float,
+    lr: float,
     batch_size: int,
     balance: bool,
-    k_ranking: int,
+    top_k: int,
     output_model: str,
     ignored_cols: list[str] = [],
     plot: bool = False,
@@ -72,9 +72,10 @@ def train_model(
 
     recsys = UcoRecSys(
         model=model,
-        k=k_ranking,
+        k=top_k,
         threshold=dm.threshold,
         plot=plot,
+        lr=lr,
     )
 
     early_stop = EarlyStopping(
@@ -211,6 +212,7 @@ def surprise_eval(
     df: pd.DataFrame,
     dataset: str,
     k: int,
+    n_splits: int = 5,
     target: str = "rating",
     min_rating: int = 1,
     max_rating: int = 10,
@@ -239,13 +241,14 @@ def surprise_eval(
         results = cross_validation(
             algo_class=algo,
             data=data,
-            n_splits=5,
+            n_splits=n_splits,
             k=k,
             cv_type=cv_type,
             threshold=df[target].mean(),
         )
         algos_metrics[algo.__name__] = results
 
+    algos_metrics = pd.DataFrame(algos_metrics)
     algos_metrics.to_csv(f"surprise_{dataset}_{cv_type}.csv")
 
 
@@ -267,7 +270,7 @@ def main():
             target=config.TARGET_COL,
             batch_size=args.batch_size,
             balance=args.balance,
-            k=args.k_ranking,
+            k=args.top_k,
             verbose=args.verbose,
         )
     # Modo TRAIN
@@ -277,10 +280,10 @@ def main():
             dataset_name=args.dataset,
             target=config.TARGET_COL,
             epochs=args.epochs,
-            # lr=args.lr,
+            lr=args.lr,
             batch_size=args.batch_size,
             balance=args.balance,
-            k_ranking=args.k_ranking,
+            top_k=args.top_k,
             output_model=args.output_model,
             plot=args.plot,
             verbose=args.verbose,
@@ -290,12 +293,12 @@ def main():
         eval_model(
             df=df,
             epochs=args.epochs,
-            n_splits=args.splits,
+            n_splits=args.k_splits,
             delta=config.DELTA,
             patience=config.PATIENCE,
             batch_size=args.batch_size,
             dataset=args.dataset,
-            k=args.k,
+            k=args.top_k,
             cv_type=args.cvtype,
             plot=args.plot,
             verbose=args.verbose,
@@ -306,9 +309,10 @@ def main():
             df=df,
             dataset=args.dataset,
             cv_type=args.cvtype,
+            n_splits=args.k_splits,
             min_rating=df[config.TARGET_COL].min(),
             max_rating=df[config.TARGET_COL].max(),
-            k=args.k,
+            k=args.top_k,
             target=config.TARGET_COL,
         )
 

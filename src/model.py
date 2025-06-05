@@ -11,7 +11,7 @@ class NeuralHybrid(nn.Module):
         cont_features: list[str],
         emb_dim: int = 128,
         hidden_dims: list[int] = [256, 128, 64, 32, 16],
-        dropout: float = 0.1,
+        dropout: float = 0.5,
         min_rating: float = 1.0,
         max_rating: float = 10.0,
     ):

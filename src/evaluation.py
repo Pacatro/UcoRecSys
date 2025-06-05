@@ -11,6 +11,7 @@ from engine import UcoRecSys
 def cross_validate(
     df: pd.DataFrame,
     model_class: type,
+    lr: float = 0.001,
     n_splits: int = 5,
     random_state: int = 42,
     epochs: int = 100,
@@ -53,7 +54,7 @@ def cross_validate(
             n_items=dm.num_items,
         )
 
-        recsys = UcoRecSys(model=model, threshold=dm.threshold, plot=plot)
+        recsys = UcoRecSys(model=model, threshold=dm.threshold, plot=plot, lr=lr)
 
         earlystop = EarlyStopping(
             monitor="val/MSE",
