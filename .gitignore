@@ -9,10 +9,6 @@ wheels/
 # Virtual environments
 .venv
 
-# Metrics report (for now)
-report.html
-report.json
-
 # Model checkpoints
 lightning_logs/
 
@@ -21,3 +17,6 @@ lightning_logs/
 
 # Models files
 *.pt
+
+# Results folder
+results/
