@@ -1,3 +1,4 @@
+import os
 import pandas as pd
 from pathlib import Path
 import lightning as L
@@ -20,7 +21,6 @@ from surprise import (
     CoClustering,
 )
 
-import db
 import config
 from evaluation import cross_validate
 from surprise_eval import cross_validation, preprocess_ratings
@@ -114,7 +114,6 @@ def train_model(
 
 def inference(
     df: pd.DataFrame,
-    dataset_name: str,
     model_path: str,
     target: str,
     batch_size: int,
@@ -166,12 +165,7 @@ def inference(
         devices="auto",
     )
 
-    test_metrics = trainer.test(model=recsys, datamodule=dm)
-    file_path = f"inference_{dataset_name}_results"
-    pd.DataFrame(test_metrics).to_csv(file_path + ".csv")
-
-    if verbose:
-        print(f"Resultados de inferencia guardados en: {file_path}.csv")
+    trainer.test(model=recsys, datamodule=dm)
 
 
 def eval_model(
@@ -186,6 +180,7 @@ def eval_model(
     ignored_cols: list[str] = [],
     cv_type: Literal["kfold", "loo"] = "kfold",
     plot: bool = False,
+    results_folder: str = "results",
     verbose: bool = False,
 ):
     avg_metrics = cross_validate(
@@ -204,8 +199,13 @@ def eval_model(
         verbose=verbose,
     )
 
-    if avg_metrics is not None:
-        avg_metrics.to_csv(f"{cv_type}_k={n_splits}_eval_{dataset}_top-{k}.csv")
+    results_path = (
+        f"{results_folder}/metrics_{cv_type}_k={n_splits}_{dataset}_top-{k}.csv"
+    )
+    avg_metrics.to_csv(results_path)
+
+    if verbose:
+        print(f"Resultados guardados en {results_path}")
 
 
 def surprise_eval(
@@ -217,44 +217,72 @@ def surprise_eval(
     min_rating: int = 1,
     max_rating: int = 10,
     cv_type: Literal["kfold", "loo"] = "kfold",
+    results_folder: str = "results",
+    seeds: list[int] = [42],
 ):
     reader = Reader(rating_scale=(min_rating, max_rating))
     df = preprocess_ratings(df)
     data = Dataset.load_from_df(df[["user_id", "item_id", "rating"]], reader)
 
-    algos = [
-        SVDpp,
+    deterministic_algos = [
         NormalPredictor,
         BaselineOnly,
         KNNBasic,
         KNNWithMeans,
         KNNWithZScore,
         KNNBaseline,
-        SVD,
-        NMF,
         SlopeOne,
-        CoClustering,
     ]
 
-    algos_metrics = {}
-    for algo in algos:
+    stochastic_algos = [SVD, SVDpp, NMF, CoClustering]
+
+    detailed_results = {}
+    threshold = df[target].mean()
+
+    for algo in deterministic_algos:
+        print(f"Running {algo.__name__} {cv_type} cross validation")
         results = cross_validation(
             algo_class=algo,
             data=data,
             n_splits=n_splits,
             k=k,
             cv_type=cv_type,
-            threshold=df[target].mean(),
+            threshold=threshold,
         )
-        algos_metrics[algo.__name__] = results
+        detailed_results[algo.__name__] = results
 
-    algos_metrics = pd.DataFrame(algos_metrics)
-    algos_metrics.to_csv(f"surprise_{cv_type}_k={n_splits}_{dataset}_top-{k}.csv")
+    for algo in stochastic_algos:
+        for random_state in seeds:
+            print(
+                f"Running {algo.__name__} (SEED: {random_state}) {cv_type} cross validation"
+            )
+            results = cross_validation(
+                algo_class=algo,
+                data=data,
+                n_splits=n_splits,
+                k=k,
+                cv_type=cv_type,
+                threshold=threshold,
+                random_state=random_state,
+            )
+            detailed_results[f"{algo.__name__} (Seed: {random_state})"] = results
+
+    combined_df = pd.DataFrame(
+        {algo: results["Mean+-Std"] for algo, results in detailed_results.items()}
+    )
+
+    results_path = (
+        f"{results_folder}/surprise_{cv_type}_k={n_splits}_{dataset}_top-{k}.csv"
+    )
+
+    combined_df.to_csv(results_path)
+
+    print(f"Resultados guardados en {results_path}")
 
 
 def main():
-    if not Path(db.DB_FILE_PATH).exists():
-        db.csv_to_sql(verbose=True)
+    if not Path(config.RESULTS_FOLDER).exists():
+        os.mkdir(config.RESULTS_FOLDER)
 
     parser = build_parser()
     args = parser.parse_args()
@@ -301,6 +329,7 @@ def main():
             k=args.top_k,
             cv_type=args.cvtype,
             plot=args.plot,
+            results_folder=config.RESULTS_FOLDER,
             verbose=args.verbose,
         )
     # Modo SURPRISE
@@ -313,7 +342,9 @@ def main():
             min_rating=df[config.TARGET_COL].min(),
             max_rating=df[config.TARGET_COL].max(),
             k=args.top_k,
+            results_folder=config.RESULTS_FOLDER,
             target=config.TARGET_COL,
+            seeds=args.seeds,
         )
 
 

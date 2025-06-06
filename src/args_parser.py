@@ -91,6 +91,12 @@ def build_parser() -> ArgumentParser:
         default=config.K,
         help=f"Number of CV splits (default: {config.K}).",
     )
+    eval_group.add_argument(
+        "--seeds",
+        type=list,
+        default=config.SEEDS,
+        help=f"Random seeds (default: {config.SEEDS}).",
+    )
 
     # 5) Miscellaneous options
     misc_group = parser.add_argument_group("Miscellaneous Options")

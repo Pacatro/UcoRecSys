@@ -1,3 +1,4 @@
+RESULTS_FOLDER = "results"
 BALANCE = False
 LR = 0.001
 BATCH_SIZE = 128
@@ -5,7 +6,8 @@ EPOCHS = 50
 PATIENCE = 5
 DELTA = 0.001
 TOP_K = 10
-K = 10
+K = 5
+SEEDS = [0, 1, 42]
 TARGET_COL = "rating"
 USER_COL = "user_id"
 ITEM_COL = "item_id"

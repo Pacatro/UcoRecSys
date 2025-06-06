@@ -91,5 +91,9 @@ def cross_validate(
 
         fold_metrics.append(metrics)
 
-    avg_metrics = pd.DataFrame(fold_metrics).mean()
-    return avg_metrics
+    all_metrics = pd.DataFrame(fold_metrics)
+    avg_metrics = all_metrics.mean()
+    std_metrics = all_metrics.std()
+
+    result = pd.DataFrame({"mean": avg_metrics, "std": std_metrics})
+    return result

@@ -67,7 +67,7 @@ Sigue estos pasos para ejecutar el proyecto:
     El siguiente comando creará el entorno virtual e instalando todas las dependencias necesarias:
 
     ```bash
-    uv build
+    uv run src/main.py -h
     ```
 
 ## Autor  
