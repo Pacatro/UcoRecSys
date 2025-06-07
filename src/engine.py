@@ -54,6 +54,7 @@ class UcoRecSys(L.LightningModule):
         val_metrics_path: str = "val_metrics.png",
         train_metrics_path: str = "train_metrics.png",
         train_losses_path: str = "train_losses.png",
+        encoders: dict | None = None,
         plot: bool = False,
     ):
         super().__init__()
@@ -67,6 +68,7 @@ class UcoRecSys(L.LightningModule):
         self.train_metrics_path = train_metrics_path
         self.train_losses_path = train_losses_path
         self.plot = plot
+        self.encoders = encoders
 
         ranking_metrics = MetricCollection(
             {
@@ -101,11 +103,29 @@ class UcoRecSys(L.LightningModule):
 
     def forward(self, batch):
         score = self.model(batch)
+
+        if self.encoders:
+            user_id_tensor = batch["user_id"]
+            item_id_tensor = batch["item_id"]
+
+            # Asegúrate de que los tensores estén en la CPU y convertidos a NumPy
+            user_id_array = user_id_tensor.detach().cpu().numpy()
+            item_id_array = item_id_tensor.detach().cpu().numpy()
+
+            user_id = self.encoders["user_id"].inverse_transform(
+                user_id_array.reshape(-1, 1)
+            )
+            item_id = self.encoders["item_id"].inverse_transform(
+                item_id_array.reshape(-1, 1)
+            )
+        else:
+            user_id = batch["user_id"].long()
+            item_id = batch["item_id"].long()
+
         return {
-            "user_id": batch["user_id"].long(),
-            "item_id": batch["item_id"].long(),
+            "user_id": user_id.ravel(),
+            "item_id": item_id.ravel(),
             "prediction": score.detach(),
-            "rating": batch["rating"].float(),
         }
 
     def step(

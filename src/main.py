@@ -1,5 +1,6 @@
 import os
 import pandas as pd
+import numpy as np
 from pathlib import Path
 import lightning as L
 from lightning.pytorch.loggers import TensorBoardLogger
@@ -66,8 +67,7 @@ def train_model(
         print(f"[TRAIN] Dataset {dataset_name}:\n{dm.df}\n")
         print(f"[TRAIN] Dataset {dataset_name} sparsity: {dm.sparsity}")
         print(f"[TRAIN] Dataset {dataset_name} threshold: {dm.threshold}")
-        print(f"[TRAIN] Train shape: {dm.train_dataset.df.shape}")
-        print(f"[TRAIN] Val shape: {dm.val_dataset.df.shape}")
+        print(f"[TRAIN] Train dataset:\n{dm.train_dataset.df}\n")
         print(f"[TRAIN] Model:\n{model}\n")
 
     recsys = UcoRecSys(
@@ -112,25 +112,71 @@ def train_model(
         print(f"Modelo entrenado guardado en: {output_model}")
 
 
+def generate_new_interactions(
+    df: pd.DataFrame,
+    samples: int = 5,
+    user_col: str = "user_id",
+    item_col: str = "item_id",
+) -> pd.DataFrame:
+    users = df["user_id"].unique()
+    items = df["item_id"].unique()
+
+    if samples == 0:
+        return df
+
+    rng = np.random.default_rng(seed=42)
+    user_choice = rng.choice(users, size=samples * 2, replace=False)
+    item_choice = rng.choice(items, size=samples * 2, replace=False)
+
+    candidates = pd.DataFrame({"user_id": user_choice, "item_id": item_choice})
+
+    positives = df[[user_col, item_col]].drop_duplicates()
+    merged = candidates.merge(
+        positives, on=[user_col, item_col], how="left", indicator=True
+    )
+    negatives = (
+        merged[merged["_merge"] == "left_only"]
+        .drop(columns="_merge")
+        .drop_duplicates()
+        .head(samples)
+        .reset_index(drop=True)
+    )
+
+    # Add randomized values for extra columns
+    item_types = ["tutorial", "use_case", "webcast"]
+    difficulties = ["Beginner", "Intermediate", "Advanced", "Undefined"]
+    negatives["item_type"] = rng.choice(item_types, size=len(negatives))
+    negatives["difficulty"] = rng.choice(difficulties, size=len(negatives))
+    negatives["nb_views"] = rng.integers(0, 2000, size=len(negatives)).astype(float)
+    negatives["watch_percentage"] = rng.integers(0, 101, size=len(negatives)).astype(
+        float
+    )
+
+    return negatives
+
+
 def inference(
     df: pd.DataFrame,
     model_path: str,
     target: str,
     batch_size: int,
     balance: bool,
-    k: int = 10,
     ignored_cols: list[str] = [],
     verbose: bool = False,
 ):
+    predict_df = generate_new_interactions(df)
+
+    if verbose:
+        print(predict_df.head())
+
     dm = ELearningDataModule(
         df,
+        predict_df=predict_df,
         target=target,
         batch_size=batch_size,
         balance=balance,
         ignored_cols=ignored_cols,
     )
-
-    dm.setup("fit")
 
     model = NeuralHybrid(
         n_users=dm.num_users,
@@ -139,33 +185,17 @@ def inference(
         cat_cardinalities=dm.cat_cardinalities,
     )
 
-    if verbose:
-        print(f"[INFERENCE] Dataset sparsity: {dm.sparsity}")
-        print(f"[INFERENCE] Dataset threshold: {dm.threshold}")
-
-    recsys = UcoRecSys(
-        model=model,
-        k=k,
-        threshold=dm.threshold,
-    )
-
-    # Cargar checkpoint proporcionado
     recsys = UcoRecSys.load_from_checkpoint(
-        model_path,
-        model=model,
-        k=k,
-        threshold=dm.threshold,
+        model_path, model=model, encoders=dm.encoders
     )
 
-    # Configurar y ejecutar prueba
-    dm.setup("test")
-    trainer = L.Trainer(
-        logger=TensorBoardLogger(name="ucorecsys", save_dir="lightning_logs"),
-        accelerator="auto",
-        devices="auto",
-    )
+    dm.setup("predict")
+    trainer = L.Trainer()
+    predictions = trainer.predict(recsys, datamodule=dm)[0]
 
-    trainer.test(model=recsys, datamodule=dm)
+    if verbose:
+        preds_df = pd.DataFrame(predictions)
+        print(preds_df)
 
 
 def eval_model(
@@ -293,12 +323,10 @@ def main():
     if args.inference:
         inference(
             df=df,
-            dataset_name=args.dataset,
             model_path=args.inference,
             target=config.TARGET_COL,
             batch_size=args.batch_size,
             balance=args.balance,
-            k=args.top_k,
             verbose=args.verbose,
         )
     # Modo TRAIN

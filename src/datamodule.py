@@ -1,4 +1,5 @@
 import pandas as pd
+from pandas.api.types import is_numeric_dtype
 import torch
 from torch.utils.data import Dataset, DataLoader
 from sklearn.preprocessing import OrdinalEncoder, MinMaxScaler
@@ -33,6 +34,7 @@ class ELearningDataModule(L.LightningDataModule):
     def __init__(
         self,
         df: pd.DataFrame,
+        predict_df: pd.DataFrame | None = None,
         batch_size: int = 32,
         test_size: float = 0.4,
         val_size: float = 0.1,
@@ -42,10 +44,11 @@ class ELearningDataModule(L.LightningDataModule):
         balance: bool = False,
         threshold: float = 0,
         preprocess: bool = True,
-        ignored_cols: list[str] = None,
+        ignored_cols: list[str] | None = None,
     ):
         super().__init__()
         self.df = df.copy()
+        self.predict_df = predict_df
         self.user_col = user_col
         self.item_col = item_col
         self.target = target
@@ -55,7 +58,7 @@ class ELearningDataModule(L.LightningDataModule):
         self.preprocess = preprocess
         self.test_size = test_size
         self.val_size = val_size
-        self.ignored_cols = ignored_cols or []
+        self.ignored_cols = ignored_cols
 
         self._preprocess()
 
@@ -81,12 +84,10 @@ class ELearningDataModule(L.LightningDataModule):
 
         assert self.df[self.target].isna().sum() == 0
 
-        self.df[self.user_col] = OrdinalEncoder().fit_transform(
-            self.df[[self.user_col]]
-        )
-        self.df[self.item_col] = OrdinalEncoder().fit_transform(
-            self.df[[self.item_col]]
-        )
+        user_encoder = OrdinalEncoder().fit(self.df[[self.user_col]])
+        item_encoder = OrdinalEncoder().fit(self.df[[self.item_col]])
+        self.encoders[self.user_col] = user_encoder
+        self.encoders[self.item_col] = item_encoder
 
         self.protected_cols = set(
             self.ignored_cols + [self.user_col, self.item_col, self.target]
@@ -97,9 +98,14 @@ class ELearningDataModule(L.LightningDataModule):
         ]
 
         for col in remaining_cols:
-            if isinstance(self.df[col].dtype, pd.CategoricalDtype):
-                num_nans = self.df[col].isna().sum()
+            if is_numeric_dtype(self.df[col]):
+                scaler = MinMaxScaler().fit(self.df[[col]])
+                self.scalers[col] = scaler
+                self.cont_features.append(col)
 
+            else:
+                self.df[col] = self.df[col].astype("category")
+                num_nans = self.df[col].isna().sum()
                 if num_nans > 0:
                     self.df[col] = self.df[col].cat.add_categories("Undefined")
                     self.df[col] = self.df[col].fillna("Undefined")
@@ -107,10 +113,6 @@ class ELearningDataModule(L.LightningDataModule):
                 le = OrdinalEncoder().fit(self.df[[col]])
                 self.encoders[col] = le
                 self.cat_cardinalities[col] = self.df[col].nunique()
-            else:
-                scaler = MinMaxScaler().fit(self.df[[col]])
-                self.scalers[col] = scaler
-                self.cont_features.append(col)
 
         self.num_cat_features = len(self.cat_cardinalities)
         self.num_cont_features = len(self.cont_features)
@@ -160,6 +162,11 @@ class ELearningDataModule(L.LightningDataModule):
                     )
                 else:
                     self.test_dataset = None
+            case "predict":
+                assert self.predict_df is not None
+                self.predict_dataset = ELearningDataset(
+                    self.predict_df, encoders=self.encoders, scalers=self.scalers
+                )
 
     def train_dataloader(self, num_workers: int = 2):
         return DataLoader(
@@ -189,7 +196,7 @@ class ELearningDataModule(L.LightningDataModule):
 
     def predict_dataloader(self):
         return (
-            DataLoader(self.test_dataset, batch_size=self.batch_size)
-            if self.test_dataset is not None
+            DataLoader(self.predict_dataset, batch_size=self.batch_size)
+            if self.predict_dataset is not None
             else None
         )

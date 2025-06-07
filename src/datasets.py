@@ -18,9 +18,6 @@ def load_mars() -> pd.DataFrame:
 
     df = pd.merge(df_explicit, df_items, on="item_id", how="inner")
 
-    df["Difficulty"] = df["Difficulty"].astype("category")
-    df["type"] = df["type"].astype("category")
-
     df.rename(
         columns={"Difficulty": "difficulty", "type": "item_type"},
         inplace=True,
@@ -49,11 +46,6 @@ def load_itm() -> pd.DataFrame:
     merged_df = merged_df.rename(
         columns={"UserID": "user_id", "Item": "item_id", "Rating": "rating"}
     )
-    merged_df["Class"] = merged_df["Class"].astype("category")
-    merged_df["Semester"] = merged_df["Semester"].astype("category")
-    merged_df["Lockdown"] = merged_df["Lockdown"].astype("category")
-    merged_df["Title"] = merged_df["Title"].astype("category")
-    merged_df[" Age"] = merged_df[" Age"].astype("category")
 
     features = [
         "user_id",
@@ -100,10 +92,6 @@ def load_coursera() -> pd.DataFrame:
     df_merged = df_merged[df_merged["_merge"] == "both"].drop(columns=["_merge"])
 
     df_merged = df_merged.rename(columns={"Course Name": "item_id"})
-    df_merged["item_id"] = df_merged["item_id"].astype("category")
-    df_merged["user_id"] = df_merged["user_id"].astype("category")
-    df_merged["Difficulty Level"] = df_merged["Difficulty Level"].astype("category")
-    df_merged["University"] = df_merged["University"].astype("category")
 
     features = [
         "user_id",
