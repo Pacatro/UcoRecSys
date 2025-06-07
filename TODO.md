@@ -11,6 +11,6 @@
 - [x] Formulación del problema y objetivos.
 - [x] Resolver anotaciones de Amelia.
 - [x] Metodología.
-- [ ] Desarrollo y experimentación.
+- [x] Desarrollo y experimentación.
 - [ ] Resultados y discusión.
 - [ ] Conclusiones y recomendaciones.

@@ -1,6 +1,5 @@
 import pandas as pd
 import numpy as np
-from sklearn.preprocessing import MinMaxScaler
 from typing import Literal
 
 
@@ -117,48 +116,8 @@ def load_coursera() -> pd.DataFrame:
     return df_merged[features]
 
 
-def load_doris() -> pd.DataFrame:
-    course_info = pd.read_csv("./data/doris_dataset/CourseInformationTable.csv")
-    students_info = pd.read_csv("./data/doris_dataset/StudentInformationTable.csv")
-    course_selection = pd.read_csv("./data/doris_dataset/CourseSelectionTable.csv")
-    course_info.drop(columns=["CourseName"], inplace=True)
-
-    merged_df = pd.merge(
-        left=course_info, right=course_selection, how="inner", on="CourseId"
-    )
-    merged_df = pd.merge(
-        left=merged_df, right=students_info, how="inner", on="StudentId"
-    )
-    merged_df.rename(
-        columns={"CourseId": "item_id", "StudentId": "user_id", "Score": "rating"},
-        inplace=True,
-    )
-
-    merged_df["rating"] = MinMaxScaler(feature_range=(0, 10)).fit_transform(
-        merged_df[["rating"]]
-    )
-
-    merged_df["Type"] = merged_df["Type"].astype("category")
-    merged_df["College"] = merged_df["College"].astype("category")
-    merged_df["Education"] = merged_df["Education"].astype("category")
-    merged_df["Major"] = merged_df["Major"].astype("category")
-
-    features = [
-        "user_id",
-        "item_id",
-        "Type",
-        "Semester",
-        "College",
-        "Grade",
-        "Education",
-        "Major",
-        "rating",
-    ]
-    return merged_df[features]
-
-
 def load_data(
-    dataset_name: Literal["mars", "itm", "coursera", "doris"],
+    dataset_name: Literal["mars", "itm", "coursera"],
 ) -> pd.DataFrame:
     match dataset_name:
         case "mars":
@@ -167,5 +126,3 @@ def load_data(
             return load_itm()
         case "coursera":
             return load_coursera()
-        case "doris":
-            return load_doris()

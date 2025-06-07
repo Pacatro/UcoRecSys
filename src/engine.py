@@ -74,7 +74,7 @@ class UcoRecSys(L.LightningModule):
                 f"Recall@{k}": RetrievalRecall(top_k=k),
                 f"F1@{k}": RetrievalFBetaScore(top_k=k, beta=1.0, adaptive_k=True),
                 f"NDCG@{k}": RetrievalNormalizedDCG(top_k=k),
-                f"HitRate@{k}": RetrievalHitRate(top_k=k),
+                f"HR@{k}": RetrievalHitRate(top_k=k),
                 f"MAP@{k}": RetrievalMAP(top_k=k),
                 f"MRR@{k}": RetrievalMRR(top_k=k),
             }
