@@ -30,6 +30,7 @@ from datamodule import ELearningDataModule
 from engine import UcoRecSys
 from model import NeuralHybrid
 from args_parser import build_parser
+from stats import friedman_test
 
 
 def train_model(
@@ -310,6 +311,42 @@ def surprise_eval(
     print(f"Resultados guardados en {results_path}")
 
 
+def get_stats_tests(metric: str, top_k: int, verbose: bool = False):
+    files = [
+        f"./results/metrics_kfold_k=5_mars_top-{top_k}.csv",
+        f"./results/metrics_kfold_k=5_itm_top-{top_k}.csv",
+        f"./results/metrics_kfold_k=5_coursera_top-{top_k}.csv",
+        f"./results/surprise_kfold_k=5_mars_top-{top_k}.csv",
+        f"./results/surprise_kfold_k=5_itm_top-{top_k}.csv",
+        f"./results/surprise_kfold_k=5_coursera_top-{top_k}.csv",
+    ]
+
+    models = [
+        "UcoRecSys",
+        # "NormalPredictor",
+        "KNNBasic",
+        # "KNNWithMeans",
+        # "KNNWithZScore",
+        # "KNNBaseline",
+        # "SlopeOne",
+        "SVD (Seed: 0)",
+        # "SVDpp (Seed: 0)",
+        # "NMF (Seed: 0)",
+        # "CoClustering (Seed: 0)",
+        # "SVD (Seed: 1)",
+        # "SVDpp (Seed: 1)",
+        # "NMF (Seed: 1)",
+        # "CoClustering (Seed: 1)",
+        # "SVD (Seed: 42)",
+        # "SVDpp (Seed: 42)",
+        # "NMF (Seed: 42)",
+        # "CoClustering (Seed: 42)",
+    ]
+    stat, p = friedman_test(files, models, metric, verbose=verbose)
+    print(f"Results for metric {metric} in top-{top_k} are:")
+    print(f"Stat: {stat}, p: {p}")
+
+
 def main():
     if not Path(config.RESULTS_FOLDER).exists():
         os.mkdir(config.RESULTS_FOLDER)
@@ -360,6 +397,21 @@ def main():
             results_folder=config.RESULTS_FOLDER,
             verbose=args.verbose,
         )
+    # Modo Test estadísticos
+    elif args.stats_test:
+        metrics = [
+            "MSE",
+            "RMSE",
+            f"F1@{args.top_k}",
+            f"Precision@{args.top_k}",
+            f"Recall@{args.top_k}",
+            f"MAP@{args.top_k}",
+            f"NDCG@{args.top_k}",
+            f"HitRate@{args.top_k}",
+            f"MRR@{args.top_k}",
+        ]
+        for metric in metrics:
+            get_stats_tests(metric, top_k=args.top_k, verbose=args.verbose)
     # Modo SURPRISE
     if args.surprise:
         surprise_eval(

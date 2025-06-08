@@ -25,7 +25,13 @@ def build_parser() -> ArgumentParser:
     mode_group.add_argument(
         "-s", "--surprise", action="store_true", help="Run Surprise evaluation."
     )
-
+    mode_group.add_argument(
+        "-st",
+        "--stats_test",
+        action="store_true",
+        default=config.STATS_TEST,
+        help=f"Run stats test (default: {config.STATS_TEST}).",
+    )
     # 2) Common arguments (used in both training and evaluation)
     common_group = parser.add_argument_group("Common Options")
     common_group.add_argument(

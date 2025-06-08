@@ -17,3 +17,4 @@ DATASET = "mars"
 CV_TYPES_CHOICES = ["kfold", "loo"]
 CV_TYPE = "kfold"
 PLOT = False
+STATS_TEST = True

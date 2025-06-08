@@ -72,7 +72,7 @@ class UcoRecSys(L.LightningModule):
 
         ranking_metrics = MetricCollection(
             {
-                f"Precison@{k}": RetrievalPrecision(top_k=k, adaptive_k=True),
+                f"Precision@{k}": RetrievalPrecision(top_k=k, adaptive_k=True),
                 f"Recall@{k}": RetrievalRecall(top_k=k),
                 f"F1@{k}": RetrievalFBetaScore(top_k=k, beta=1.0, adaptive_k=True),
                 f"NDCG@{k}": RetrievalNormalizedDCG(top_k=k),
