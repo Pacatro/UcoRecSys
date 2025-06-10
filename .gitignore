@@ -17,6 +17,3 @@ lightning_logs/
 
 # Models files
 *.pt
-
-# Results folder
-results/
