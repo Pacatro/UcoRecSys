@@ -126,6 +126,7 @@ class UcoRecSys(L.LightningModule):
             "user_id": user_id.ravel(),
             "item_id": item_id.ravel(),
             "prediction": score.detach(),
+            "relevant": score.detach() > self.threshold,
         }
 
     def step(

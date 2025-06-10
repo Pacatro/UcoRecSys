@@ -19,6 +19,4 @@ dependencies = [
 ]
 
 [dependency-groups]
-dev = [
-    "tensorboard>=2.19.0",
-]
+dev = ["tensorboard>=2.19.0"]

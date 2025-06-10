@@ -40,10 +40,10 @@ def train_model(
     epochs: int,
     lr: float,
     batch_size: int,
-    balance: bool,
     top_k: int,
     output_model: str,
     ignored_cols: list[str] = [],
+    balance: bool = False,
     plot: bool = False,
     verbose: bool = False,
 ):
@@ -65,10 +65,11 @@ def train_model(
     )
 
     if verbose:
-        print(f"[TRAIN] Dataset {dataset_name}:\n{dm.df}\n")
+        # print(f"[TRAIN] Dataset {dataset_name}:\n{dm.df}\n")
         print(f"[TRAIN] Dataset {dataset_name} sparsity: {dm.sparsity}")
         print(f"[TRAIN] Dataset {dataset_name} threshold: {dm.threshold}")
-        print(f"[TRAIN] Train dataset:\n{dm.train_dataset.df}\n")
+        print(f"[TRAIN] Dataset {dataset_name} lenght: {len(dm.df)}")
+        # print(f"[TRAIN] Train dataset:\n{dm.train_dataset.df}\n")
         print(f"[TRAIN] Model:\n{model}\n")
 
     recsys = UcoRecSys(
@@ -107,15 +108,14 @@ def train_model(
 
     # Guardar ruta del mejor modelo
     best_path = checkpoint.best_model_path
-    # Copiar o renombrar según output_model
+
     Path(best_path).rename(output_model)
-    if verbose:
-        print(f"Modelo entrenado guardado en: {output_model}")
+    print(f"Modelo entrenado guardado en: {output_model}")
 
 
 def generate_new_interactions(
     df: pd.DataFrame,
-    samples: int = 5,
+    samples: int = 130,
     user_col: str = "user_id",
     item_col: str = "item_id",
 ) -> pd.DataFrame:
@@ -156,29 +156,9 @@ def generate_new_interactions(
     return negatives
 
 
-def inference(
-    df: pd.DataFrame,
-    model_path: str,
-    target: str,
-    batch_size: int,
-    balance: bool,
-    ignored_cols: list[str] = [],
-    verbose: bool = False,
-):
-    predict_df = generate_new_interactions(df)
-
-    if verbose:
-        print(predict_df.head())
-
-    dm = ELearningDataModule(
-        df,
-        predict_df=predict_df,
-        target=target,
-        batch_size=batch_size,
-        balance=balance,
-        ignored_cols=ignored_cols,
-    )
-
+def recommend(
+    dm: ELearningDataModule, top_k: int, model_path: str, user_id: int | None = None
+) -> pd.DataFrame:
     model = NeuralHybrid(
         n_users=dm.num_users,
         n_items=dm.num_items,
@@ -194,9 +174,40 @@ def inference(
     trainer = L.Trainer()
     predictions = trainer.predict(recsys, datamodule=dm)[0]
 
+    preds_df = pd.DataFrame(predictions).sort_values(by=["prediction"], ascending=False)
+
+    return (
+        preds_df.head(top_k)
+        if user_id is None
+        else preds_df[preds_df["user_id"] == user_id].head(top_k)
+    )
+
+
+def inference(
+    df: pd.DataFrame,
+    model_path: str,
+    target: str,
+    batch_size: int,
+    top_k: int,
+    balance: bool = False,
+    ignored_cols: list[str] = [],
+    verbose: bool = False,
+):
+    predict_df = generate_new_interactions(df)
     if verbose:
-        preds_df = pd.DataFrame(predictions)
-        print(preds_df)
+        print(predict_df[predict_df["user_id"] == 564609])
+
+    dm = ELearningDataModule(
+        df,
+        predict_df=predict_df,
+        target=target,
+        batch_size=batch_size,
+        balance=balance,
+        ignored_cols=ignored_cols,
+    )
+
+    user_preds = recommend(dm, top_k, model_path)
+    print(user_preds)
 
 
 def eval_model(
@@ -311,45 +322,56 @@ def surprise_eval(
     print(f"Resultados guardados en {results_path}")
 
 
-def get_stats_tests(metric: str, top_k: int, verbose: bool = False):
+def get_stats_tests(top_k: int, verbose: bool = False):
+    datasets = ["mars", "itm"]
     files = [
         f"./results/metrics_kfold_k=5_mars_top-{top_k}.csv",
         f"./results/metrics_kfold_k=5_itm_top-{top_k}.csv",
-        f"./results/metrics_kfold_k=5_coursera_top-{top_k}.csv",
         f"./results/surprise_kfold_k=5_mars_top-{top_k}.csv",
         f"./results/surprise_kfold_k=5_itm_top-{top_k}.csv",
-        f"./results/surprise_kfold_k=5_coursera_top-{top_k}.csv",
     ]
 
     models = [
-        "UcoRecSys",
-        # "NormalPredictor",
+        "NormalPredictor",
         "KNNBasic",
-        # "KNNWithMeans",
-        # "KNNWithZScore",
-        # "KNNBaseline",
-        # "SlopeOne",
+        "KNNWithMeans",
+        "KNNWithZScore",
+        "KNNBaseline",
+        "SlopeOne",
         "SVD (Seed: 0)",
-        # "SVDpp (Seed: 0)",
-        # "NMF (Seed: 0)",
-        # "CoClustering (Seed: 0)",
-        # "SVD (Seed: 1)",
-        # "SVDpp (Seed: 1)",
-        # "NMF (Seed: 1)",
-        # "CoClustering (Seed: 1)",
-        # "SVD (Seed: 42)",
-        # "SVDpp (Seed: 42)",
-        # "NMF (Seed: 42)",
-        # "CoClustering (Seed: 42)",
+        "SVDpp (Seed: 0)",
+        "NMF (Seed: 0)",
+        "CoClustering (Seed: 0)",
+        "SVD (Seed: 1)",
+        "SVDpp (Seed: 1)",
+        "NMF (Seed: 1)",
+        "CoClustering (Seed: 1)",
+        "SVD (Seed: 42)",
+        "SVDpp (Seed: 42)",
+        "NMF (Seed: 42)",
+        "CoClustering (Seed: 42)",
+        "Modelo Propuesto",
     ]
-    stat, p = friedman_test(files, models, metric, verbose=verbose)
-    print(f"Results for metric {metric} in top-{top_k} are:")
-    print(f"Stat: {stat}, p: {p}")
+
+    stats_results = {dataset: {"p_value": 0, "stat": 0} for dataset in datasets}
+
+    for dataset in datasets:
+        stat, p = friedman_test(files, models, dataset, top_k, verbose=verbose)
+        print(f"Results for dataset {dataset} in top-{top_k} are:")
+        print(f"Stat: {stat}, p: {p}")
+        stats_results[dataset]["p_value"] = p
+        stats_results[dataset]["stat"] = stat
+
+    stastics_path = f"{config.RESULTS_FOLDER}/stats/stats_{top_k}.csv"
+    pd.DataFrame.from_dict(stats_results, orient="index").to_csv(stastics_path)
 
 
 def main():
     if not Path(config.RESULTS_FOLDER).exists():
         os.mkdir(config.RESULTS_FOLDER)
+
+    if not Path(f"{config.RESULTS_FOLDER}/stats").exists():
+        os.mkdir(f"{config.RESULTS_FOLDER}/stats")
 
     parser = build_parser()
     args = parser.parse_args()
@@ -363,7 +385,7 @@ def main():
             model_path=args.inference,
             target=config.TARGET_COL,
             batch_size=args.batch_size,
-            balance=args.balance,
+            top_k=args.top_k,
             verbose=args.verbose,
         )
     # Modo TRAIN
@@ -375,7 +397,6 @@ def main():
             epochs=args.epochs,
             lr=args.lr,
             batch_size=args.batch_size,
-            balance=args.balance,
             top_k=args.top_k,
             output_model=args.output_model,
             plot=args.plot,
@@ -397,21 +418,7 @@ def main():
             results_folder=config.RESULTS_FOLDER,
             verbose=args.verbose,
         )
-    # Modo Test estadísticos
-    elif args.stats_test:
-        metrics = [
-            "MSE",
-            "RMSE",
-            f"F1@{args.top_k}",
-            f"Precision@{args.top_k}",
-            f"Recall@{args.top_k}",
-            f"MAP@{args.top_k}",
-            f"NDCG@{args.top_k}",
-            f"HitRate@{args.top_k}",
-            f"MRR@{args.top_k}",
-        ]
-        for metric in metrics:
-            get_stats_tests(metric, top_k=args.top_k, verbose=args.verbose)
+
     # Modo SURPRISE
     if args.surprise:
         surprise_eval(
@@ -426,6 +433,10 @@ def main():
             target=config.TARGET_COL,
             seeds=args.seeds,
         )
+
+    # Modo Test estadísticos
+    if args.stats_test:
+        get_stats_tests(top_k=args.top_k, verbose=args.verbose)
 
 
 if __name__ == "__main__":

@@ -64,13 +64,13 @@ def build_parser() -> ArgumentParser:
         help=f"Training epochs (default: {config.EPOCHS}).",
     )
     train_group.add_argument(
-        "--batch-size",
+        "--batch_size",
         type=int,
         default=config.BATCH_SIZE,
         help=f"Training batch size (default: {config.BATCH_SIZE}).",
     )
     train_group.add_argument(
-        "--output-model",
+        "--output_model",
         metavar="MODEL_OUT",
         default=config.OUTPUT_MODEL_PATH,
         help=f"Path to save trained model (default: {config.OUTPUT_MODEL_PATH}).",
@@ -84,12 +84,12 @@ def build_parser() -> ArgumentParser:
 
     # 4) Evaluation-specific arguments
     eval_group = parser.add_argument_group("Evaluation Options")
-    eval_group.add_argument(
-        "--balance",
-        action="store_true",
-        default=config.BALANCE,
-        help="Balance train/validation datasets.",
-    )
+    # eval_group.add_argument(
+    #     "--balance",
+    #     action="store_true",
+    #     default=config.BALANCE,
+    #     help="Balance train/validation datasets.",
+    # )
     eval_group.add_argument(
         "-k",
         "--k_splits",

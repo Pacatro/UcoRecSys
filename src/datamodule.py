@@ -194,9 +194,13 @@ class ELearningDataModule(L.LightningDataModule):
             else None
         )
 
-    def predict_dataloader(self):
+    def predict_dataloader(self, num_workers: int = 2):
         return (
-            DataLoader(self.predict_dataset, batch_size=self.batch_size)
+            DataLoader(
+                self.predict_dataset,
+                batch_size=self.batch_size,
+                num_workers=num_workers,
+            )
             if self.predict_dataset is not None
             else None
         )

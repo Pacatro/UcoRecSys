@@ -48,7 +48,6 @@ def calc_metrics(
     indexes = torch.tensor([pred.uid for pred in preds])
     predictions = torch.tensor([pred.est for pred in preds])
     target = torch.tensor([pred.r_ui >= threshold for pred in preds])
-    # ratings = torch.tensor([pred.r_ui for pred in preds])
 
     # Ranking metrics
     ranking_metrics = MetricCollection(
@@ -63,20 +62,9 @@ def calc_metrics(
         }
     )
 
-    # # Prediction (regression) metrics
-    # prediction_metrics = MetricCollection(
-    #     {
-    #         "R2": R2Score(),
-    #         "ExplainedVariance": ExplainedVariance(),
-    #     }
-    # )
-
-    # Update and compute all metrics
     ranking_metrics.update(predictions, target, indexes=indexes)
-    # prediction_metrics.update(predictions, ratings)
 
     ranking_results = {k: v.item() for k, v in ranking_metrics.compute().items()}
-    # prediction_results = {k: v.item() for k, v in prediction_metrics.compute().items()}
 
     # Surprise library metrics
     rmse = float(accuracy.rmse(preds, verbose=False))
@@ -84,7 +72,6 @@ def calc_metrics(
 
     # Clear stateful metrics
     ranking_metrics.reset()
-    # prediction_metrics.reset()
 
     return {
         "MSE": mse,
