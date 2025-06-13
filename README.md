@@ -1,51 +1,54 @@
 # UcoRecSys
 
-Este repositorio forma parte de Trabajo de Fin de Grado (TFG) realizado por Franacisco de Paula Algar Muñoz en la Universidad de Córdoba (UCO) titulado: ***Aplicación de sistemas de recomendación en entornos educativos.***
+Este repositorio forma parte de Trabajo de Fin de Grado (TFG) realizado por Franacisco de Paula Algar Muñoz en la Universidad de Córdoba (UCO) titulado: ***Aplicación de sistemas de recomendación en entornos educativos*** ([PDF](./Memoria_TFG.pdf)).
 
 El objetivo de este TFG es desarrollar un sistema de recomendación para e-learning basado en un conjunto de datos de referencia, lo que permitirá evaluar su rendimiento en comparación con otros modelos previos.
 
 ## Cómo usar
 
 ```bash
-usage: ucorecsys [-h] (-i MODEL_PATH | -t | -e | -s) [-ds {mars,coursera,itm}] [-cv {kfold,loo}] [--epochs EPOCHS] [--batch-size BATCH_SIZE]
-                 [--output-model MODEL_OUT] [--k_ranking K_RANKING] [--balance] [--k K] [-ns SPLITS] [-p] [-v]
+usage: ucorecsys [-h] (-i MODEL_PATH | -t | -e | -s | -st) [-ds {mars,itm}] [-cv {kfold,loo}]
+                 [--top_k TOP_K] [--epochs EPOCHS] [--batch_size BATCH_SIZE] [--output_model MODEL_OUT]
+                 [-lr LR] [-k K_SPLITS] [--seeds SEEDS] [-p] [-v]
 ```
 
 ### Opciones
 
 ```bash
+Tool to train, evaluate, or perform inference with a recommendation model.
+
 options:
   -h, --help            show this help message and exit
   -i MODEL_PATH, --inference MODEL_PATH
-                        Run inference on an already-trained model. You must specify the path to the model file.
-  -t, --train           Train the model using the specified parameters.
-  -e, --eval            Evaluate the proposed model (using the dataset and cvtype parameters).
-  -s, --surprise        Run evaluation of Surprise algorithms (using the Surprise library).
+                        Run inference on a trained model (provide path to model file).
+  -t, --train           Train the model.
+  -e, --eval            Evaluate the model.
+  -s, --surprise        Run Surprise evaluation.
+  -st, --stats_test     Run stats test (default: False).
 
-Data / Validation Options:
-  -ds {mars,coursera,itm}, --dataset {mars,coursera,itm}
-                        Name of the dataset to use. Default: 'mars'.
+Common Options:
+  -ds {mars,itm}, --dataset {mars,itm}
+                        Dataset to use (default: mars).
   -cv {kfold,loo}, --cvtype {kfold,loo}
-                        Type of cross-validation. Default: 'kfold'.
+                        Cross-validation type (default: kfold).
+  --top_k TOP_K         Top-k value for ranking metrics (default: 10).
 
 Training Options:
-  --epochs EPOCHS       Number of epochs for training (default: 50).
-  --batch-size BATCH_SIZE
-                        Batch size for training (default: 128).
-  --output-model MODEL_OUT
-                        Path to save the trained model (default: model.pt).
-  --k_ranking K_RANKING
-                        Parameter k for ranking metrics calculation (default: 10).
+  --epochs EPOCHS       Training epochs (default: 50).
+  --batch_size BATCH_SIZE
+                        Training batch size (default: 128).
+  --output_model MODEL_OUT
+                        Path to save trained model (default: model.pt).
+  -lr LR                Learning rate (default: 0.001).
 
 Evaluation Options:
-  --balance             Balance training and validation data.
-  --k K                 Parameter k for ranking metrics calculation (default: 10).
-  -ns SPLITS, --splits SPLITS
-                        Number of splits for cross-validation (default: 10).
+  -k K_SPLITS, --k_splits K_SPLITS
+                        Number of CV splits (default: 5).
+  --seeds SEEDS         Random seeds (default: [0, 1, 42]).
 
-General Options:
-  -p, --plot            Generate metric plots during execution.
-  -v, --verbose         Print detailed information during execution.
+Miscellaneous Options:
+  -p, --plot            Generate plots.
+  -v, --verbose         Enable verbose output.```
 ```
 
 ## Puesta en marcha
@@ -76,5 +79,5 @@ Sigue estos pasos para ejecutar el proyecto:
 
 ## Tutores  
 
-- **Amelia Zafra Gómez**  
-- **Cristóbal Romero Morales**
+**Amelia Zafra Gómez**  
+**Cristóbal Romero Morales**

@@ -115,37 +115,55 @@ def train_model(
 
 def generate_new_interactions(
     df: pd.DataFrame,
-    samples: int = 130,
+    samples: int = 50,
+    interactions_per_user: int = 20,
     user_col: str = "user_id",
     item_col: str = "item_id",
 ) -> pd.DataFrame:
-    users = df["user_id"].unique()
-    items = df["item_id"].unique()
+    users = df[user_col].unique()
+    items = df[item_col].unique()
 
     if samples == 0:
         return df
 
     rng = np.random.default_rng(seed=42)
-    user_choice = rng.choice(users, size=samples * 2, replace=False)
-    item_choice = rng.choice(items, size=samples * 2, replace=False)
 
-    candidates = pd.DataFrame({"user_id": user_choice, "item_id": item_choice})
+    num_users_needed = max(1, samples // interactions_per_user)
+
+    if num_users_needed > len(users):
+        selected_users = rng.choice(users, size=num_users_needed, replace=True)
+    else:
+        selected_users = rng.choice(users, size=num_users_needed, replace=False)
+
+    candidates_list = []
+
+    for user in selected_users:
+        user_items = rng.choice(items, size=interactions_per_user, replace=True)
+
+        user_interactions = pd.DataFrame(
+            {user_col: [user] * interactions_per_user, item_col: user_items}
+        )
+
+        candidates_list.append(user_interactions)
+
+    candidates = pd.concat(candidates_list, ignore_index=True)
 
     positives = df[[user_col, item_col]].drop_duplicates()
     merged = candidates.merge(
         positives, on=[user_col, item_col], how="left", indicator=True
     )
+
     negatives = (
         merged[merged["_merge"] == "left_only"]
         .drop(columns="_merge")
         .drop_duplicates()
-        .head(samples)
+        .head(samples)  # Limitar al número exacto solicitado
         .reset_index(drop=True)
     )
 
-    # Add randomized values for extra columns
     item_types = ["tutorial", "use_case", "webcast"]
     difficulties = ["Beginner", "Intermediate", "Advanced", "Undefined"]
+
     negatives["item_type"] = rng.choice(item_types, size=len(negatives))
     negatives["difficulty"] = rng.choice(difficulties, size=len(negatives))
     negatives["nb_views"] = rng.integers(0, 2000, size=len(negatives)).astype(float)
@@ -157,8 +175,8 @@ def generate_new_interactions(
 
 
 def recommend(
-    dm: ELearningDataModule, top_k: int, model_path: str, user_id: int | None = None
-) -> pd.DataFrame:
+    dm: ELearningDataModule, top_k: int, model_path: str
+) -> dict[int, pd.DataFrame]:
     model = NeuralHybrid(
         n_users=dm.num_users,
         n_items=dm.num_items,
@@ -173,14 +191,18 @@ def recommend(
     dm.setup("predict")
     trainer = L.Trainer()
     predictions = trainer.predict(recsys, datamodule=dm)[0]
+    preds = pd.DataFrame(predictions).sort_values(by=["user_id"])
 
-    preds_df = pd.DataFrame(predictions).sort_values(by=["prediction"], ascending=False)
+    rankings = {}
 
-    return (
-        preds_df.head(top_k)
-        if user_id is None
-        else preds_df[preds_df["user_id"] == user_id].head(top_k)
-    )
+    for user, user_preds in preds.groupby("user_id"):
+        rankings[user] = (
+            user_preds.sort_values(by=["prediction"], ascending=False)
+            .head(top_k)
+            .reset_index(drop=True)
+        )
+
+    return rankings
 
 
 def inference(
@@ -192,10 +214,12 @@ def inference(
     balance: bool = False,
     ignored_cols: list[str] = [],
     verbose: bool = False,
+    save: bool = False,
 ):
     predict_df = generate_new_interactions(df)
+
     if verbose:
-        print(predict_df[predict_df["user_id"] == 564609])
+        print(predict_df[predict_df["item_id"] == 38664])
 
     dm = ELearningDataModule(
         df,
@@ -206,8 +230,12 @@ def inference(
         ignored_cols=ignored_cols,
     )
 
-    user_preds = recommend(dm, top_k, model_path)
-    print(user_preds)
+    rankings = recommend(dm, top_k, model_path)
+
+    for user, ranking in rankings.items():
+        print(ranking, "\n")
+        if save:
+            ranking.to_csv(f"ranking_{user}_{top_k}.csv")
 
 
 def eval_model(
