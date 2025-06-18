@@ -58,9 +58,10 @@ class ELearningDataModule(L.LightningDataModule):
         self.preprocess = preprocess
         self.test_size = test_size
         self.val_size = val_size
-        self.ignored_cols = ignored_cols
+        self.ignored_cols = ignored_cols if ignored_cols else []
 
         self._preprocess()
+        self._prepare_predict_data()
 
         self.num_users = self.df[user_col].nunique()
         self.num_items = self.df[item_col].nunique()
@@ -118,6 +119,19 @@ class ELearningDataModule(L.LightningDataModule):
         self.num_cont_features = len(self.cont_features)
 
         self.train_df, self.val_df, self.test_df = self._split_data()
+
+    def _prepare_predict_data(self):
+        if self.predict_df is None:
+            return
+
+        for col in self.predict_df.columns:
+            num_nans = self.predict_df[col].isna().sum()
+            if num_nans > 0:
+                self.predict_df[col] = (
+                    self.predict_df[col].fillna(0)
+                    if is_numeric_dtype(self.predict_df[col])
+                    else self.predict_df[col].fillna("Undefined")
+                )
 
     def _split_data(self):
         if self.test_size == 0:
