@@ -7,7 +7,7 @@ El objetivo de este TFG es desarrollar un sistema de recomendación para e-learn
 ## Cómo usar
 
 ```bash
-usage: ucorecsys [-h] (-i MODEL_PATH | -t | -e | -s | -st) [-ds {mars,itm}] [-cv {kfold,loo}]
+ucorecsys [-h] (-i MODEL_PATH | -t | -e | -s | -st) [-ds {mars,itm}] [-cv {kfold,loo}]
                  [--top_k TOP_K] [--epochs EPOCHS] [--batch_size BATCH_SIZE] [--output_model MODEL_OUT]
                  [-lr LR] [-k K_SPLITS] [--seeds SEEDS] [-p] [-v]
 ```
@@ -15,16 +15,13 @@ usage: ucorecsys [-h] (-i MODEL_PATH | -t | -e | -s | -st) [-ds {mars,itm}] [-cv
 ### Opciones
 
 ```bash
-Tool to train, evaluate, or perform inference with a recommendation model.
-
-options:
-  -h, --help            show this help message and exit
-  -i MODEL_PATH, --inference MODEL_PATH
-                        Run inference on a trained model (provide path to model file).
-  -t, --train           Train the model.
-  -e, --eval            Evaluate the model.
-  -s, --surprise        Run Surprise evaluation.
-  -st, --stats_test     Run stats test (default: False).
+-h, --help            show this help message and exit
+-i MODEL_PATH, --inference MODEL_PATH
+                      Run inference on a trained model (provide path to model file).
+-t, --train           Train the model.
+-e, --eval            Evaluate the model.
+-s, --surprise        Run Surprise evaluation.
+-st, --stats_test     Run stats test (default: False).
 
 Common Options:
   -ds {mars,itm}, --dataset {mars,itm}
@@ -67,15 +64,29 @@ Sigue estos pasos para ejecutar el proyecto:
 
 2. **Ejecuta el proyecto**
 
-    El siguiente comando creará el entorno virtual e instalando todas las dependencias necesarias:
+    El siguiente comando creará el entorno virtual instalando todas las dependencias necesarias:
 
     ```bash
     uv run src/main.py -h
     ```
 
+## Ejemplos
+
+- Entrenamiento del modelo sobre el conjunto de datos MARS utilizando 10 épocas y una lista de Top-15 recomendaciones guardado en el archivo `tfg.pt`:
+
+    ```bash
+    uv run src/main.py -t -ds mars --epochs 10 --top_k 15 --output_model tfg.pt
+    ```
+
+- Inferencia sobre el modelo entrenado anteriormente:
+
+    ```bash
+    uv run src/main.py -i tfg.pt
+    ```
+
 ## Autor  
 
-**Francisco de Paula Algar Muñoz**  
+[**Francisco de Paula Algar Muñoz**](https://github.com/Pacatro)
 
 ## Tutores  
 
