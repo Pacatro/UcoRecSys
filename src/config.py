@@ -1,20 +1,27 @@
-RESULTS_FOLDER = "results"
-BALANCE = False
-LR = 0.001
-BATCH_SIZE = 128
-EPOCHS = 50
-PATIENCE = 5
-DELTA = 0.001
-TOP_K = 10
-K = 5
-SEEDS = [0, 1, 42]
-TARGET_COL = "rating"
-USER_COL = "user_id"
-ITEM_COL = "item_id"
-OUTPUT_MODEL_PATH = "model.pt"
-DATASETS_CHOICES = ["mars", "itm"]
-DATASET = "mars"
-CV_TYPES_CHOICES = ["kfold", "loo"]
-CV_TYPE = "kfold"
-PLOT = False
-STATS_TEST = False
+# Folders
+RESULTS_FOLDER: str = "results"
+OUTPUT_MODEL_PATH: str = "model.pt"
+
+# Datasets
+BALANCE: bool = False
+TARGET_COL: str = "rating"
+ITEM_COL: str = "item_id"
+USER_COL: str = "user_id"
+DATASETS_CHOICES: list[str] = ["mars", "itm"]
+DATASET: str = "mars"
+
+# Training
+LR: float = 0.001
+BATCH_SIZE: int = 128
+EPOCHS: int = 50
+PATIENCE: int = 5
+DELTA: float = 0.001
+TOP_K: int = 10
+
+# Eval
+SEEDS: list[int] = [0, 1, 42]
+K: int = 5
+CV_TYPES_CHOICES: list[str] = ["kfold", "holdout"]
+CV_TYPE: str = "kfold"
+PLOT: bool = False
+STATS_TEST: bool = False

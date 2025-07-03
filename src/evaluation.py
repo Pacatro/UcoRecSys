@@ -23,7 +23,7 @@ def cross_validate(
     ignored_cols: list[str] = [],
     plot: bool = False,
     verbose: bool = False,
-) -> pd.Series:
+) -> pd.DataFrame:
     cv = (
         KFold(n_splits=n_splits, random_state=random_state, shuffle=True)
         if cv_type == "kfold"

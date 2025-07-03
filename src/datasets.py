@@ -118,3 +118,5 @@ def load_data(
             return load_itm()
         # case "coursera":
         #     return load_coursera()
+        case _:
+            raise ValueError(f"Unsupported dataset: {dataset_name}")

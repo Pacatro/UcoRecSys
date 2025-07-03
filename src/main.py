@@ -180,11 +180,6 @@ def generate_new_interactions(
 def extrac_user_interactions(
     df: pd.DataFrame, user_id: int, n_interactions: int = 10
 ) -> pd.DataFrame:
-    # users = df["user_id"].unique().tolist()
-    # for user in users:
-    #     user_interactions = df[df["user_id"] == user]
-    #     if len(user_interactions) > n_interactions:
-    #         print(user_interactions)
     user_interactions = df[df["user_id"] == user_id]
     return user_interactions.sample(n=n_interactions)
 
