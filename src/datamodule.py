@@ -8,6 +8,18 @@ import lightning as L
 
 
 class ELearningDataset(Dataset):
+    """
+    PyTorch Dataset for e-learning data, with optional encoding and scaling.
+
+    Args:
+        df (pd.DataFrame): DataFrame containing the data.
+        encoders (dict, optional): Dictionary of column encoders. Defaults to None.
+        scalers (dict, optional): Dictionary of column scalers. Defaults to None.
+
+    Returns:
+        dict: Dictionary of tensorized row values for each sample.
+    """
+
     def __init__(
         self,
         df: pd.DataFrame,
@@ -31,6 +43,35 @@ class ELearningDataset(Dataset):
 
 
 class ELearningDataModule(L.LightningDataModule):
+    """
+    PyTorch Lightning DataModule for e-learning recommendation tasks.
+
+    Handles preprocessing, encoding, scaling, splitting, and dataloader creation.
+
+    Args:
+        df (pd.DataFrame): Main DataFrame with user-item interactions.
+        predict_df (pd.DataFrame, optional): DataFrame for prediction. Defaults to None.
+        batch_size (int, optional): Batch size for dataloaders. Defaults to 32.
+        test_size (float, optional): Proportion of data for test split. Defaults to 0.4.
+        val_size (float, optional): Proportion of data for validation split. Defaults to 0.1.
+        user_col (str, optional): Name of user column. Defaults to "user_id".
+        item_col (str, optional): Name of item column. Defaults to "item_id".
+        target (str, optional): Name of target column. Defaults to "rating".
+        balance (bool, optional): Whether to balance the dataset. Defaults to False.
+        threshold (float, optional): Threshold for binarization. Defaults to 0.
+        preprocess (bool, optional): Whether to preprocess data. Defaults to True.
+        ignored_cols (list[str], optional): Columns to ignore. Defaults to None.
+
+    Attributes:
+        num_users (int): Number of unique users.
+        num_items (int): Number of unique items.
+        min_rating (float): Minimum rating value.
+        max_rating (float): Maximum rating value.
+        sparsity (float): Data sparsity ratio.
+        cat_cardinalities (dict): Cardinalities of categorical features.
+        cont_features (list): List of continuous feature names.
+    """
+
     def __init__(
         self,
         df: pd.DataFrame,

@@ -24,6 +24,27 @@ def cross_validate(
     plot: bool = False,
     verbose: bool = False,
 ) -> pd.DataFrame:
+    """Perform cross-validation for the given model.
+
+    Args:
+        df (pd.DataFrame): The input DataFrame containing the dataset.
+        model_class (type): The class of the model to be evaluated. It should inherit from `UcoRecSys`.
+        lr (float, optional): The learning rate for the optimizer. Defaults to 0.001.
+        n_splits (int, optional): The number of splits for the cross-validation. Defaults to 5.
+        random_state (int, optional): The random state for the cross-validation. Defaults to 42.
+        epochs (int, optional): The number of epochs for the training. Defaults to 100.
+        cv_type (Literal["kfold", "loo"], optional): The type of cross-validation to use. Defaults to "kfold".
+        k (int, optional): The number of recommendations to make. Defaults to 10.
+        batch_size (int, optional): The batch size for training. Defaults to 128.
+        patience (int, optional): The patience for early stopping. Defaults to 5.
+        delta (float, optional): The minimum change to qualify as an improvement. Defaults to 0.001.
+        ignored_cols (list[str], optional): The columns to ignore during training. Defaults to [].
+        plot (bool, optional): Whether to plot the training progress. Defaults to False.
+        verbose (bool, optional): Whether to print verbose output. Defaults to False.
+
+    Returns:
+        pd.DataFrame: The cross-validation results.
+    """
     cv = (
         KFold(n_splits=n_splits, random_state=random_state, shuffle=True)
         if cv_type == "kfold"

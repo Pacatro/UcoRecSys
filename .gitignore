@@ -17,3 +17,6 @@ lightning_logs/
 
 # Models files
 *.pt
+
+# Predict file
+./data/predict_df.csv

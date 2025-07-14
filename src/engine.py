@@ -2,6 +2,7 @@ import torch
 from torch import nn
 import lightning.pytorch as L
 import matplotlib.pyplot as plt
+from typing import Optional
 from torchmetrics import MetricCollection, Metric
 from torchmetrics.retrieval import (
     RetrievalPrecision,
@@ -50,11 +51,11 @@ class UcoRecSys(L.LightningModule):
         lr: float = 1e-3,
         weight_decay: float = 1e-6,
         k: int = 10,
-        loss_fn: nn.Module | None = None,
+        loss_fn: Optional[nn.Module] = None,
         val_metrics_path: str = "val_metrics.png",
         train_metrics_path: str = "train_metrics.png",
         train_losses_path: str = "train_losses.png",
-        encoders: dict | None = None,
+        encoders: Optional[dict] = None,
         plot: bool = False,
     ):
         super().__init__()
@@ -185,11 +186,11 @@ class UcoRecSys(L.LightningModule):
         )
 
     def on_train_epoch_start(self):
-        if self.plot:
+        if self.train_ranking_metrics:
             self.train_ranking_metrics.reset()
 
     def on_train_epoch_end(self):
-        if self.plot:
+        if self.train_ranking_metrics:
             train_ranking_metrics = self.train_ranking_metrics.compute()
             self.train_metrics_history.append(train_ranking_metrics)
             self.log_dict(train_ranking_metrics)
@@ -223,10 +224,11 @@ class UcoRecSys(L.LightningModule):
             fig.savefig(self.val_metrics_path)
 
             fig, ax = plt.subplots(figsize=(12, 8))
-            self.train_ranking_metrics.plot(
-                val=self.train_metrics_history, ax=ax, together=True
-            )
-            fig.savefig(self.train_metrics_path)
+            if self.train_ranking_metrics:
+                self.train_ranking_metrics.plot(
+                    val=self.train_metrics_history, ax=ax, together=True
+                )
+                fig.savefig(self.train_metrics_path)
 
             self.plot_train_losses()
 

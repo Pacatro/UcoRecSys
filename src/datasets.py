@@ -3,6 +3,11 @@ from typing import Literal
 
 
 def load_mars() -> pd.DataFrame:
+    """Load the MARS dataset.
+
+    Returns:
+        pd.DataFrame: The MARS dataset.
+    """
     explicit_df_en = pd.read_csv("./data/mars_dataset/explicit_ratings_en.csv")
     explicit_df_fr = pd.read_csv("./data/mars_dataset/explicit_ratings_fr.csv")
 
@@ -36,6 +41,11 @@ def load_mars() -> pd.DataFrame:
 
 
 def load_itm() -> pd.DataFrame:
+    """Load the ITM dataset.
+
+    Returns:
+        pd.DataFrame: The ITM dataset.
+    """
     ratings_df = pd.read_csv("./data/itm_dataset/ratings.csv")
     items_df = pd.read_csv("./data/itm_dataset/items.csv")
     users_df = pd.read_csv("./data/itm_dataset/users.csv")
@@ -63,60 +73,22 @@ def load_itm() -> pd.DataFrame:
     return merged_df[features]
 
 
-# def load_coursera() -> pd.DataFrame:
-#     # df = pd.read_csv("./data/coursera_dataset/Coursera.csv")
-#     # num_users = 2000
-#     # num_interactions = 20000
-#     # user_ids = np.random.randint(1, num_users + 1, size=num_interactions)
-#     # course_titles = np.random.choice(df["Course Name"], size=num_interactions)
-#     # interaction_types = np.random.choice(
-#     #     ["view", "enroll", "complete", "rate"],
-#     #     size=num_interactions,
-#     #     p=[0.4, 0.3, 0.2, 0.1],
-#     # )
-#     #
-#     # # Asegurar que todos tengan un rating (aunque no sea realista para algunas interacciones)
-#     # ratings = np.random.uniform(1, 5, size=num_interactions)
-#     #
-#     # interactions = pd.DataFrame(
-#     #     {
-#     #         "user_id": user_ids,
-#     #         "Course Name": course_titles,
-#     #         "interaction_type": interaction_types,
-#     #         "rating": ratings,
-#     #     }
-#     # )
-#     #
-#     # df_merged = interactions.merge(df, on="Course Name", how="left", indicator=True)
-#     # df_merged = df_merged[df_merged["_merge"] == "both"].drop(columns=["_merge"])
-#     #
-#     # df_merged = df_merged.rename(columns={"Course Name": "item_id"})
-#
-#     df = pd.read_csv("./data/coursera_dataset/Coursera_reviews.csv")
-#
-#     df.rename(columns={"reviewers": "user_id", "course_id": "item_id"}, inplace=True)
-#
-#     features = [
-#         "user_id",
-#         "item_id",
-#         # "Difficulty Level",
-#         # "University",
-#         "rating",
-#     ]
-#
-#     return df[features].head(80000)
-#
+def load_data(dataset_name: Literal["mars", "itm"]) -> pd.DataFrame:
+    """Load the specified dataset.
 
+    Args:
+        dataset_name (Literal["mars", "itm"]): The name of the dataset to load.
 
-def load_data(
-    dataset_name: Literal["mars", "itm"],
-) -> pd.DataFrame:
+    Raises:
+        ValueError: If the dataset name is not supported.
+
+    Returns:
+        pd.DataFrame: The loaded dataset as a pandas DataFrame.
+    """
     match dataset_name:
         case "mars":
             return load_mars()
         case "itm":
             return load_itm()
-        # case "coursera":
-        #     return load_coursera()
         case _:
             raise ValueError(f"Unsupported dataset: {dataset_name}")

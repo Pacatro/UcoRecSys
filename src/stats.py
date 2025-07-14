@@ -7,6 +7,19 @@ import config
 
 
 def extract_metrics_values(results_topk_paths: list[str], dataset: str) -> pd.DataFrame:
+    """
+    Extracts metric values from result files for a given dataset and returns them as a DataFrame.
+
+    Args:
+        results_topk_paths (list[str]): List of file paths containing metric results.
+        dataset (str): Name of the dataset to filter files.
+
+    Returns:
+        pd.DataFrame: DataFrame with metrics as index and models as columns.
+
+    Raises:
+        ValueError: If no files are found for the specified dataset.
+    """
     metrics_results: dict[str, dict[str, float]] = {}
 
     paths = [p for p in results_topk_paths if f"_{dataset}_" in p]
@@ -41,6 +54,22 @@ def extract_metrics_values(results_topk_paths: list[str], dataset: str) -> pd.Da
 def friedman_test(
     files: list[str], models: list[str], dataset: str, topk: int, verbose: bool = False
 ):
+    """
+    Performs the Friedman test (and post-hoc Nemenyi test if significant) to compare multiple models across datasets.
+
+    Args:
+        files (list[str]): List of result file paths.
+        models (list[str]): List of model names to compare.
+        dataset (str): Name of the dataset.
+        topk (int): Top-k value for evaluation (used in output file naming).
+        verbose (bool, optional): If True, prints detailed results. Defaults to False.
+
+    Returns:
+        tuple: Friedman test statistic and p-value.
+
+    Raises:
+        ValueError: If fewer than two datasets with complete values for all models are found.
+    """
     print(f"Friedman test for {dataset} dataset")
     df = extract_metrics_values(files, dataset)
     df_filtered = df[models].dropna()

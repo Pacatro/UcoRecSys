@@ -3,6 +3,15 @@ import config
 
 
 def build_parser() -> ArgumentParser:
+    """
+    Builds and returns an argument parser for the UcoRecSys command-line tool.
+
+    The parser supports mutually exclusive execution modes (inference, training, evaluation, Surprise evaluation, and statistical tests),
+    as well as grouped arguments for common, training, evaluation, and miscellaneous options.
+
+    Returns:
+        ArgumentParser: Configured argument parser for the CLI.
+    """
     parser = ArgumentParser(
         prog="ucorecsys",
         description="Tool to train, evaluate, or perform inference with a recommendation model.",

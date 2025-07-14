@@ -26,8 +26,13 @@ from engine import RetrievalFBetaScore
 
 def preprocess_ratings(df: pd.DataFrame) -> pd.DataFrame:
     """
-    Aplica preprocesamiento únicamente a la columna 'rating',
-    dejando intactos los identificadores.
+    Apply preprocessing to the ratings DataFrame for Surprise's models evaluation.
+
+    Args:
+        df (pd.DataFrame): The ratings DataFrame.
+
+    Returns:
+        pd.DataFrame: The preprocessed ratings DataFrame.
     """
     le_user = LabelEncoder()
     le_course = LabelEncoder()
@@ -44,6 +49,17 @@ def calc_metrics(
     k: int = 10,
     threshold: float = 8,
 ) -> dict[str, float]:
+    """
+    Calculates ranking and regression metrics for a list of Surprise predictions.
+
+    Args:
+        preds (list[Prediction]): List of Surprise Prediction objects.
+        k (int, optional): Top-k value for ranking metrics. Defaults to 10.
+        threshold (float, optional): Threshold to consider a rating as relevant. Defaults to 8.
+
+    Returns:
+        dict[str, float]: Dictionary with MSE, RMSE, and ranking metrics (Precision@k, Recall@k, etc).
+    """
     # Extract prediction data
     indexes = torch.tensor([pred.uid for pred in preds])
     predictions = torch.tensor([pred.est for pred in preds])
@@ -90,6 +106,21 @@ def cross_validation(
     cv_type: Literal["kfold", "loo"] | None = None,
     random_state: int | None = None,
 ) -> pd.DataFrame:
+    """
+    Performs cross-validation for a Surprise algorithm and computes metrics for each fold.
+
+    Args:
+        algo_class (Callable[..., AlgoBase]): The Surprise algorithm class to instantiate.
+        data (Dataset): The Surprise Dataset object.
+        n_splits (int, optional): Number of splits/folds. Defaults to 5.
+        k (int, optional): Top-k value for ranking metrics. Defaults to 10.
+        threshold (float, optional): Threshold to consider a rating as relevant. Defaults to 8.0.
+        cv_type (Literal["kfold", "loo"] | None, optional): Cross-validation type ('kfold' or 'loo'). Defaults to 'kfold'.
+        random_state (int | None, optional): Random state for reproducibility. Defaults to None.
+
+    Returns:
+        pd.DataFrame: DataFrame with mean, std, and mean±std for each metric across folds.
+    """
     cv_type = cv_type if cv_type is not None else "kfold"
 
     cv = (

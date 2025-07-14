@@ -3,6 +3,33 @@ from torch import nn
 
 
 class NeuralHybrid(nn.Module):
+    """
+    This is the proposed model for the UCO RecSys, NeuralHybrid is a hybrid recommendation model that combines collaborative filtering (CF)
+    and content-based (CB) features using a neural network architecture.
+
+    The model uses user and item embeddings for CF, category embeddings for CB features,
+    and incorporates continuous features directly. All features are concatenated and passed
+    through a multi-layer perceptron (MLP) to predict the rating.
+
+    Args:
+        n_users (int): Number of unique users.
+        n_items (int): Number of unique items.
+        cat_cardinalities (dict[str, int]): Dictionary mapping categorical feature names to their cardinalities.
+        cont_features (list[str]): List of continuous feature names.
+        emb_dim (int, optional): Embedding dimension for user/item embeddings. Defaults to 128.
+        hidden_dims (list[int], optional): List of hidden layer sizes for the MLP. Defaults to [256, 128, 64, 32, 16].
+        dropout (float, optional): Dropout rate for the MLP. Defaults to 0.5.
+        min_rating (float, optional): Minimum possible rating. Defaults to 1.0.
+        max_rating (float, optional): Maximum possible rating. Defaults to 10.0.
+
+    Forward Input:
+        batch (dict[str, torch.Tensor]): Batch dictionary containing user_id, item_id,
+            categorical and continuous features.
+
+    Forward Output:
+        torch.Tensor: Predicted ratings, clamped between min_rating and max_rating.
+    """
+
     def __init__(
         self,
         n_users: int,

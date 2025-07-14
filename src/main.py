@@ -49,7 +49,7 @@ def train_model(
 ):
     droped_interactions = df[df["user_id"] == 292680].sample(n=5)
     df = df.drop(droped_interactions.index)
-    droped_interactions.to_csv("predict_df.csv")
+    droped_interactions.to_csv("./data/predict_df.csv")
     dm = ELearningDataModule(
         df,
         target=target,
@@ -204,17 +204,6 @@ def recommend(dm: ELearningDataModule, top_k: int, model_path: str) -> pd.DataFr
 
     preds = pd.DataFrame(predictions[0]).sort_values(by=["user_id"])
 
-    # rankings = {}
-    #
-    # for user, user_preds in preds.groupby("user_id"):
-    #     rankings[user] = (
-    #         user_preds.sort_values(by=["prediction"], ascending=False)
-    #         .head(top_k)
-    #         .reset_index(drop=True)
-    #     )
-    #
-    # return rankings
-
     return (
         preds.sort_values(by=["prediction"], ascending=False)
         .head(top_k)
@@ -233,9 +222,7 @@ def inference(
     verbose: bool = False,
     # save: bool = False,
 ):
-    # predict_df = extrac_user_interactions(df, user_id=292680)
-    # predict_df = generate_new_interactions(df)
-    predict_df = pd.read_csv("predict_df.csv")
+    predict_df = pd.read_csv("./data/predict_df.csv")
 
     if verbose:
         print(predict_df)
@@ -252,11 +239,6 @@ def inference(
     ranking = recommend(dm, top_k, model_path)
 
     print(ranking)
-
-    # for user, ranking in rankings.items():
-    #     print(ranking, "\n")
-    #     if save:
-    #         ranking.to_csv(f"ranking_{user}_{top_k}.csv")
 
 
 def eval_model(
