@@ -1,6 +1,6 @@
 # UcoRecSys
 
-Este repositorio forma parte de Trabajo de Fin de Grado (TFG) realizado por Franacisco de Paula Algar Muñoz en la Universidad de Córdoba (UCO) titulado: ***Aplicación de sistemas de recomendación en entornos educativos*** ([PDF](./Memoria_TFG.pdf)).
+Este repositorio forma parte de Trabajo de Fin de Grado (TFG) realizado por Francisco de Paula Algar Muñoz en la Universidad de Córdoba (UCO) titulado: ***Aplicación de sistemas de recomendación en entornos educativos*** ([PDF](./Memoria_TFG.pdf)).
 
 El objetivo de este TFG es desarrollar un sistema de recomendación para e-learning basado en un conjunto de datos de referencia, lo que permitirá evaluar su rendimiento en comparación con otros modelos previos.
 
