@@ -1,9 +1,9 @@
 # UcoRecSys
 
+This repository is part of the Bachelor’s Thesis (TFG) by Francisco de Paula Algar Muñoz at the University of Córdoba (UCO), titled: **_Application of Recommendation Systems in Educational Environments_** ([PDF](./Memoria_TFG.pdf)).
+
 > [!NOTE]  
 > Most of the project is written in Spanish, only this repository has been translated into English.
-
-This repository is part of the Bachelor’s Thesis (TFG) by Francisco de Paula Algar Muñoz at the University of Córdoba (UCO), titled: **_Application of Recommendation Systems in Educational Environments_** ([PDF](./Memoria_TFG.pdf)).
 
 The goal of this project is to develop a recommendation system for e-learning based on a benchmark dataset, allowing evaluation of its performance compared to previous models.
 
