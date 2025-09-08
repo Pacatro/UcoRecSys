@@ -1,10 +1,10 @@
 # UcoRecSys
 
-Este repositorio forma parte de Trabajo de Fin de Grado (TFG) realizado por Francisco de Paula Algar Muñoz en la Universidad de Córdoba (UCO) titulado: ***Aplicación de sistemas de recomendación en entornos educativos*** ([PDF](./Memoria_TFG.pdf)).
+This repository is part of the Bachelor’s Thesis (TFG) by Francisco de Paula Algar Muñoz at the University of Córdoba (UCO), titled: **_Application of Recommendation Systems in Educational Environments_** ([PDF](./Memoria_TFG.pdf)).
 
-El objetivo de este TFG es desarrollar un sistema de recomendación para e-learning basado en un conjunto de datos de referencia, lo que permitirá evaluar su rendimiento en comparación con otros modelos previos.
+The goal of this project is to develop a recommendation system for e-learning based on a benchmark dataset, allowing evaluation of its performance compared to previous models.
 
-## Cómo usar
+## Usage
 
 ```bash
 ucorecsys [-h] (-i MODEL_PATH | -t | -e | -s | -st) [-ds {mars,itm}] [-cv {kfold,loo}]
@@ -12,16 +12,16 @@ ucorecsys [-h] (-i MODEL_PATH | -t | -e | -s | -st) [-ds {mars,itm}] [-cv {kfold
                  [-lr LR] [-k K_SPLITS] [--seeds SEEDS] [-p] [-v]
 ```
 
-### Opciones
+### Options
 
 ```bash
--h, --help            show this help message and exit
+-h, --help            Show this help message and exit
 -i MODEL_PATH, --inference MODEL_PATH
                       Run inference on a trained model (provide path to model file).
 -t, --train           Train the model.
 -e, --eval            Evaluate the model.
 -s, --surprise        Run Surprise evaluation.
--st, --stats_test     Run stats test (default: False).
+-st, --stats_test     Run statistical tests (default: False).
 
 Common Options:
   -ds {mars,itm}, --dataset {mars,itm}
@@ -31,11 +31,11 @@ Common Options:
   --top_k TOP_K         Top-k value for ranking metrics (default: 10).
 
 Training Options:
-  --epochs EPOCHS       Training epochs (default: 50).
+  --epochs EPOCHS       Number of training epochs (default: 50).
   --batch_size BATCH_SIZE
                         Training batch size (default: 128).
   --output_model MODEL_OUT
-                        Path to save trained model (default: model.pt).
+                        Path to save the trained model (default: model.pt).
   -lr LR                Learning rate (default: 0.001).
 
 Evaluation Options:
@@ -45,50 +45,54 @@ Evaluation Options:
 
 Miscellaneous Options:
   -p, --plot            Generate plots.
-  -v, --verbose         Enable verbose output.```
+  -v, --verbose         Enable verbose output.
 ```
 
-## Puesta en marcha
+## Getting Started
 
-> [!NOTE]
-> Para ejecutar este proyecto es necesario tener instalado el manajador de paquetes [`uv`](https://docs.astral.sh/uv/)
+> [!NOTE]  
+> To run this project, you need to have the [`uv`](https://docs.astral.sh/uv/) package manager installed.
 
-Sigue estos pasos para ejecutar el proyecto:
+Follow these steps to run the project:
 
-1. **Clona el repositorio**
+1. **Clone the repository**
 
-    ```bash
-    git clone https://github.com/Pacatro/UcoRecSys.git
-    cd UcoRecSys
-    ```
+   ```bash
+   git clone https://github.com/Pacatro/UcoRecSys.git
+   cd UcoRecSys
+   ```
 
-2. **Ejecuta el proyecto**
+2. **Install dependencies and create a virtual environment**
 
-    El siguiente comando creará el entorno virtual instalando todas las dependencias necesarias:
+   ```bash
+   uv sync
+   ```
 
-    ```bash
-    uv run src/main.py -h
-    ```
+3. **Run the project**
 
-## Ejemplos
+   ```bash
+   uv run src/main.py -h
+   ```
 
-- Entrenamiento del modelo sobre el conjunto de datos MARS utilizando 10 épocas y una lista de Top-15 recomendaciones guardado en el archivo `tfg.pt`:
+## Examples
 
-    ```bash
-    uv run src/main.py -t -ds mars --epochs 10 --top_k 15 --output_model tfg.pt
-    ```
+- Train the model on the MARS dataset for 10 epochs, generating a Top-15 recommendation list and saving the model as `tfg.pt`:
 
-- Inferencia sobre el modelo entrenado anteriormente:
+  ```bash
+  uv run src/main.py -t -ds mars --epochs 10 --top_k 15 --output_model tfg.pt
+  ```
 
-    ```bash
-    uv run src/main.py -i tfg.pt
-    ```
+- Run inference using the previously trained model:
 
-## Autor  
+  ```bash
+  uv run src/main.py -i tfg.pt
+  ```
+
+## Author
 
 [**Francisco de Paula Algar Muñoz**](https://github.com/Pacatro)
 
-## Tutores  
+## Advisors
 
 **Amelia Zafra Gómez**  
 **Cristóbal Romero Morales**
