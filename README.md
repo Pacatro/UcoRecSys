@@ -99,3 +99,6 @@ Follow these steps to run the project:
 
 **Amelia Zafra Gómez**  
 **Cristóbal Romero Morales**
+
+## License
+[**MIT**](https://opensource.org/license/mit) - [**Paco Algar Muñoz**](https://github.com/Pacatro)
