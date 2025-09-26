@@ -68,7 +68,8 @@ Follow these steps to run the project:
 2. **Install dependencies and create a virtual environment**
 
    ```bash
-   uv sync
+   uv sync --extra cpu # For CPU
+   uv sync --extra cu128 # For CUDA 12.8
    ```
 
 3. **Run the project**
@@ -101,4 +102,5 @@ Follow these steps to run the project:
 **Cristóbal Romero Morales**
 
 ## License
+
 [**MIT**](https://opensource.org/license/mit) - Created by [**Paco Algar Muñoz**](https://github.com/Pacatro)
